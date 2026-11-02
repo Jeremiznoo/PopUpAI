@@ -129,6 +129,11 @@ fn builder(bus: &Bus) -> Result<connection::Builder<'_>, IpcError> {
     .map_err(bus_error)
 }
 
+/// A plain connection to the bus, for the parts that only call other services.
+pub(crate) async fn connect(bus: &Bus) -> Result<Connection, IpcError> {
+    builder(bus)?.build().await.map_err(bus_error)
+}
+
 /// Become the running instance, or find the one that already runs.
 pub async fn claim(bus: &Bus) -> Result<Claim, IpcError> {
     let (commands, receiver) = unbounded_channel();

@@ -1,6 +1,6 @@
 [package]
 name = "popupai-platform"
-description = "PopUpAI desktop integration without Qt: single instance and remote commands over D-Bus."
+description = "PopUpAI desktop integration without Qt: single instance, remote commands and the global shortcut over D-Bus."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -9,9 +9,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+popupai-core = { path = "../popupai-core" }
+ashpd.workspace = true
+futures-util.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt", "sync"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 zbus.workspace = true
 
 [dev-dependencies]
+serde.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
