@@ -69,10 +69,29 @@ Window {
     // Outside-click dismissal is "the window lost keyboard focus". Ignore the
     // deactivation that cannot happen before the window has been active once.
     onActiveChanged: {
+        controller.trace(active ? "active" : "inactive")
         if (active)
             wasActive = true
         else if (wasActive && visible)
             closePopup("focus lost")
+    }
+
+    // Timing events for the log (fixed labels only), to measure how fast the popup
+    // appears once the application is warm.
+    property bool awaitingFirstFrame: false
+
+    onVisibleChanged: {
+        if (visible) {
+            awaitingFirstFrame = true
+            controller.trace("visible")
+        }
+    }
+
+    onFrameSwapped: {
+        if (awaitingFirstFrame) {
+            awaitingFirstFrame = false
+            controller.trace("first frame")
+        }
     }
 
     Component.onCompleted: {

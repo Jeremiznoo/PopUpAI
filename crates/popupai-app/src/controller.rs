@@ -49,6 +49,11 @@ pub mod qobject {
         #[qinvokable]
         fn resume(self: Pin<&mut PopupController>);
 
+        /// Log a UI timing event. Only a fixed set of labels is accepted, so no
+        /// content can reach the log through this door.
+        #[qinvokable]
+        fn trace(self: Pin<&mut PopupController>, event: &QString);
+
         /// A later invocation asked for something: "toggle", "show", "hide" or "quit".
         #[qsignal]
         fn command(self: Pin<&mut PopupController>, name: QString);
@@ -189,6 +194,14 @@ impl qobject::PopupController {
         self.as_mut()
             .set_background_answer(opening.background_answer);
         self.sync();
+    }
+
+    fn trace(self: Pin<&mut Self>, event: &QString) {
+        const LABELS: [&str; 4] = ["visible", "first frame", "active", "inactive"];
+        let event = event.to_string();
+        if let Some(label) = LABELS.iter().find(|label| **label == event) {
+            tracing::info!(event = %label, "ui");
+        }
     }
 
     fn dismiss(self: Pin<&mut Self>, reason: &QString) {

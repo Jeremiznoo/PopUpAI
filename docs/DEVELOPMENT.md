@@ -170,6 +170,12 @@ the popup back, and `--quit` (or Ctrl+C in its terminal) is how you stop it.
    D-Bus bus and the Qt `offscreen` platform, so it touches neither your session bus
    nor your screen.
 
+   `tools/try-resident.sh` is the on-screen counterpart: it starts PopUpAI hidden, shows
+   and hides the popup by itself several times over D-Bus, prints the latency of each
+   appearance from the application's own timing logs (fixed labels only), then leaves
+   the popup up for you to ask a question. It holds the D-Bus name on your session bus
+   while it runs.
+
 3. **Run it.**
 
    ```bash
