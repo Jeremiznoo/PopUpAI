@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import org.kde.layershell 1.0 as LayerShell
-import io.github.popupai
+import io.github.jeremiznoo.popupai
 
 Window {
     id: popup

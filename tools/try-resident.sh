@@ -19,7 +19,7 @@
 # was kept (target/try-resident.log). Timings cover the local application only; the
 # compositor's own display latency and the model's latency are separate.
 #
-# While it runs it holds the D-Bus name io.github.popupai.PopUpAI on your session bus.
+# While it runs it holds the D-Bus name io.github.jeremiznoo.PopUpAI on your session bus.
 # Everything it starts is stopped on exit.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -59,8 +59,8 @@ EOF
 chmod 600 "$tmp/config.toml"
 
 call() { # call Show|Hide
-    dbus-send --session --dest=io.github.popupai.PopUpAI --type=method_call \
-        /io/github/popupai/PopUpAI "io.github.popupai.PopUpAI.$1"
+    dbus-send --session --dest=io.github.jeremiznoo.PopUpAI --type=method_call \
+        /io/github/jeremiznoo/PopUpAI "io.github.jeremiznoo.PopUpAI.$1"
 }
 
 POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 \

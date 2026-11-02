@@ -11,10 +11,12 @@
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use zbus::{Connection, connection};
 
-/// Provisional application id: the owner has not confirmed the final one yet.
-pub const BUS_NAME: &str = "io.github.popupai.PopUpAI";
-pub const OBJECT_PATH: &str = "/io/github/popupai/PopUpAI";
-pub const INTERFACE: &str = "io.github.popupai.PopUpAI";
+/// The application id: the reverse-DNS form of the GitHub namespace, which is the
+/// Flathub convention for projects hosted on GitHub. The D-Bus name, the object path,
+/// the interface name and (later) the `.desktop` file and the portal app id all use it.
+pub const BUS_NAME: &str = "io.github.jeremiznoo.PopUpAI";
+pub const OBJECT_PATH: &str = "/io/github/jeremiznoo/PopUpAI";
+pub const INTERFACE: &str = "io.github.jeremiznoo.PopUpAI";
 
 /// What a second invocation can ask the running instance to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,7 +98,7 @@ struct Service {
 }
 
 // The interface name must be a literal here; a test checks it equals `INTERFACE`.
-#[zbus::interface(name = "io.github.popupai.PopUpAI")]
+#[zbus::interface(name = "io.github.jeremiznoo.PopUpAI")]
 impl Service {
     fn toggle(&self) {
         let _ = self.commands.send(Command::Toggle);

@@ -15,7 +15,7 @@ use popupai_security::UnavailableStore;
 
 use cli::Action;
 
-const QML_ENTRY: &str = "qrc:/qt/qml/io/github/popupai/qml/Main.qml";
+const QML_ENTRY: &str = "qrc:/qt/qml/io/github/jeremiznoo/popupai/qml/Main.qml";
 
 fn init_logging(level: LogLevel) {
     let level = match level {
@@ -34,7 +34,7 @@ fn init_logging(level: LogLevel) {
 
 fn main() -> ExitCode {
     cxx_qt::init_crate!(cxx_qt_lib);
-    cxx_qt::init_qml_module!("io.github.popupai");
+    cxx_qt::init_qml_module!("io.github.jeremiznoo.popupai");
 
     let action = match cli::parse(std::env::args().skip(1)) {
         Ok(Action::Help) => {

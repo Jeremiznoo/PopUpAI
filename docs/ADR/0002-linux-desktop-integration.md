@@ -87,7 +87,7 @@ popup banner) and points to the supported manual route below.
 ### 5. Manual route: `popupai --toggle`
 
 A second invocation sends a D-Bus call to the running instance (single instance
-via the well-known name `io.github.popupai.PopUpAI`, provisional id). Any user
+via the well-known name `io.github.jeremiznoo.PopUpAI`, the application id). Any user
 can bind that command in *System Settings, Keyboard, Shortcuts, Add Command*.
 This works on every desktop and is the documented fallback, not an automatic
 one. The D-Bus interface exposes `Toggle`, `Show`, `Hide` and `Quit` only. It never

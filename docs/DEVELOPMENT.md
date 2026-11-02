@@ -145,8 +145,8 @@ This happened once during development and was caught by the full test run.
 The application is resident. The first process keeps running; dismissing the popup
 hides it, and a later `popupai --toggle` shows it again with a fresh session. A second
 launch never starts a second PopUpAI: it hands its command to the running one over
-D-Bus and exits. While it runs it holds the name `io.github.popupai.PopUpAI` on the
-session bus (a provisional id), and releases it on exit.
+D-Bus and exits. While it runs it holds the name `io.github.jeremiznoo.PopUpAI` on the
+session bus, and releases it on exit.
 
 ```text
 popupai              show the popup (starts PopUpAI if needed)

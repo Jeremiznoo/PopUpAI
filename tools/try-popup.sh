@@ -7,7 +7,7 @@
 # It uses a temporary configuration and a free port, so it touches neither your real
 # configuration nor anything already listening. It quits when the popup is dismissed
 # (POPUPAI_EXIT_ON_DISMISS=1) or after 120 seconds. While it runs it holds the D-Bus
-# name io.github.popupai.PopUpAI on your session bus, and releases it on exit.
+# name io.github.jeremiznoo.PopUpAI on your session bus, and releases it on exit.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
