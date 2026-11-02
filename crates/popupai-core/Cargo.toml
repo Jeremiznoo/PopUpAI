@@ -1,0 +1,11 @@
+[package]
+name = "popupai-core"
+description = "PopUpAI application logic: sessions, state and orchestration. No UI and no OS dependencies."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]

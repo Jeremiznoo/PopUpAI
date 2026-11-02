@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["crates/popupai-core"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+# Not publishable until a license is chosen (see README).
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
