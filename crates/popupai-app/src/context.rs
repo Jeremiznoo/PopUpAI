@@ -3,6 +3,7 @@
 //! QML constructs the controller itself, so it cannot receive arguments; it reads
 //! this context, installed once in `main` before the QML engine starts.
 
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use popupai_core::orchestrator::{Event, Orchestrator};
@@ -18,6 +19,10 @@ pub struct Parts {
     /// A problem to show to the user at start-up (for example an unreadable
     /// configuration file). Empty when there is none.
     pub notice: String,
+    /// Where the settings may be written back (for example the provider the user
+    /// picked). `None` when the file could not be read: it is then left alone
+    /// rather than overwritten with defaults.
+    pub config_path: Option<PathBuf>,
     /// Whether the popup shows as soon as the application starts.
     pub start_visible: bool,
     /// Development aid: quit when the popup is dismissed instead of staying
@@ -35,6 +40,7 @@ pub struct AppContext {
     pub orchestrator: Orchestrator,
     pub runtime: Handle,
     pub notice: String,
+    pub config_path: Option<PathBuf>,
     pub start_visible: bool,
     pub exit_on_dismiss: bool,
     events: Mutex<Option<UnboundedReceiver<Event>>>,
@@ -48,6 +54,7 @@ impl AppContext {
             orchestrator: parts.orchestrator,
             runtime: parts.runtime,
             notice: parts.notice,
+            config_path: parts.config_path,
             start_visible: parts.start_visible,
             exit_on_dismiss: parts.exit_on_dismiss,
             events: Mutex::new(Some(parts.events)),

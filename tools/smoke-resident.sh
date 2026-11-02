@@ -47,12 +47,27 @@ echo "Building..."
 cargo build -p popupai-app >/dev/null 2>&1 || { echo "build failed"; exit 1; }
 bin=target/debug/popupai-app
 
-dbus-daemon --session --nofork --print-address=1 --address="unix:path=$tmp/bus" >"$tmp/addr" 2>/dev/null &
+# A bus with no service directories: the stock session configuration would let it start
+# whatever is installed on the machine (the real desktop portal, for one).
+cat >"$tmp/bus.conf" <<BUSEOF
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:path=$tmp/bus</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+BUSEOF
+dbus-daemon --nofork --print-address=1 --config-file="$tmp/bus.conf" >"$tmp/addr" 2>/dev/null &
 bus_pid=$!
 for _ in $(seq 1 50); do [ -s "$tmp/addr" ] && break; sleep 0.1; done
 export DBUS_SESSION_BUS_ADDRESS="$(head -1 "$tmp/addr")"
-: >"$tmp/config.toml"
-chmod 600 "$tmp/config.toml"
+# No configuration file: the first-run providers (one per vendor) are used.
 export POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1
 
 echo "Private bus: $DBUS_SESSION_BUS_ADDRESS"
@@ -61,6 +76,10 @@ echo "1. start hidden, as autostart would"
 app_pid=$!
 check "the instance claims its name" wait_for "claimed the instance name"
 check "it starts without showing the popup" exactly "popup opened" 0
+# No secret store and no desktop portal exist on the private bus. Both absences must be
+# reported, not crash the application or hang it.
+check "the global shortcut failure is reported, not fatal" wait_for "global shortcut unavailable"
+check "with no key stored, the local provider is the one selected" wait_for 'provider selected provider="ollama"'
 
 echo "2. a second launch hands its command over and exits"
 SECONDS=0

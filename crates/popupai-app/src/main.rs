@@ -2,6 +2,7 @@ mod cli;
 mod config_path;
 mod context;
 mod controller;
+mod key_input;
 mod shortcut_notice;
 mod view_model;
 
@@ -12,8 +13,7 @@ use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 use popupai_core::config::{Config, LogLevel};
 use popupai_core::orchestrator::{DefaultProviderFactory, Orchestrator};
 use popupai_platform::shortcut::{Settings as ShortcutSettings, spawn as spawn_shortcut};
-use popupai_platform::{BUS_NAME, Bus, Claim, Command};
-use popupai_security::UnavailableStore;
+use popupai_platform::{BUS_NAME, Bus, Claim, Command, SecretServiceStore};
 use tokio::sync::mpsc::unbounded_channel;
 
 use cli::Action;
@@ -125,11 +125,12 @@ fn main() -> ExitCode {
         tracing::warn!("{notice}");
     }
 
-    // The system secret store is not implemented yet. Providers that need a key
-    // report that clearly; keyless local providers such as Ollama still work.
-    let store = Arc::new(UnavailableStore::new(
-        "the system secret store is not implemented yet",
-    ));
+    // API keys live in the system secret store (Secret Service: KDE Wallet, GNOME
+    // Keyring, KeePassXC). If none is running, providers that need a key say so, and
+    // keyless local providers such as Ollama still work.
+    let store = Arc::new(SecretServiceStore::new());
+    let config_writable = notice.is_empty();
+
     // Commands come from two places: later invocations (D-Bus) and the global
     // shortcut (the desktop portal). They meet in one channel.
     let shortcut_chord = config.shortcut();
@@ -182,10 +183,19 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
+    // Without an explicit choice, start on the first provider that can work now.
+    runtime.block_on(orchestrator.auto_select());
+    tracing::info!(
+        provider = orchestrator
+            .current_provider()
+            .map_or("none".to_owned(), |p| p.id),
+        "provider selected"
+    );
     context::install(context::AppContext::new(context::Parts {
         orchestrator,
         runtime: runtime.handle().clone(),
         notice,
+        config_path: config_writable.then_some(path),
         start_visible,
         exit_on_dismiss: std::env::var_os("POPUPAI_EXIT_ON_DISMISS").is_some_and(|v| v == "1"),
         events,

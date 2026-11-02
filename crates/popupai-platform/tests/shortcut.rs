@@ -219,6 +219,24 @@ async fn a_portal_without_a_registry_still_works_and_says_so() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_failure_after_a_refused_registration_mentions_the_registration() {
+    let bus = PrivateBus::start();
+    let _portal = MockPortal::start(
+        &bus.address,
+        Options {
+            registry: false,
+            bind: Bind::Cancelled,
+            ..Options::default()
+        },
+    )
+    .await;
+    let mut run = start_client(&bus);
+    let reason = unavailable_reason(next_status(&mut run).await);
+    assert!(reason.contains("declined"), "{reason}");
+    assert!(reason.contains("no application registry"), "{reason}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_session_closed_by_the_portal_is_reported() {
     let bus = PrivateBus::start();
     let portal = MockPortal::start(&bus.address, Options::default()).await;

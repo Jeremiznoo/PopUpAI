@@ -77,6 +77,15 @@ impl ViewModel {
         self.status = Status::Failed;
     }
 
+    /// Forget a local error (for example a rejected key) once it is resolved. A
+    /// failure that came with a partial answer stays a failure.
+    pub fn clear_error(&mut self) {
+        self.error.clear();
+        if self.status == Status::Failed && self.answer.is_empty() {
+            self.status = Status::Idle;
+        }
+    }
+
     /// The user pressed Stop.
     pub fn stop(&mut self) {
         if self.status == Status::Streaming {
@@ -330,5 +339,16 @@ mod tests {
         vm.apply(&chunk(1, "a very private answer"));
         let shown = format!("{vm:?}");
         assert!(!shown.contains("private"), "{shown}");
+    }
+
+    #[test]
+    fn a_local_error_can_be_cleared_back_to_idle() {
+        let mut model = ViewModel::default();
+        model.begin(1);
+        model.fail_locally("The key could not be saved.");
+        assert_eq!(model.status, Status::Failed);
+        model.clear_error();
+        assert_eq!(model.status, Status::Idle);
+        assert!(model.error.is_empty());
     }
 }

@@ -21,11 +21,13 @@ pub mod qobject {
         #[qml_element]
         #[qproperty(QString, question)]
         #[qproperty(QString, answer)]
+        #[qproperty(QString, answer_html, cxx_name = "answerHtml")]
         #[qproperty(QString, error_text, cxx_name = "errorText")]
         #[qproperty(QString, status)]
         #[qproperty(QString, provider_label, cxx_name = "providerLabel")]
         #[qproperty(QString, notice)]
         #[qproperty(bool, background_answer, cxx_name = "backgroundAnswer")]
+        #[qproperty(bool, needs_key, cxx_name = "needsKey")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
         type PopupController = super::PopupControllerRust;
@@ -49,6 +51,17 @@ pub mod qobject {
         #[qinvokable]
         fn resume(self: Pin<&mut PopupController>);
 
+        /// Switch to the next provider in the list.
+        #[qinvokable]
+        #[cxx_name = "cycleProvider"]
+        fn cycle_provider(self: Pin<&mut PopupController>);
+
+        /// Store the API key pasted for the current provider in the system secret
+        /// store. The caller clears its own copy afterwards.
+        #[qinvokable]
+        #[cxx_name = "saveKey"]
+        fn save_key(self: Pin<&mut PopupController>, key: &QString);
+
         /// Log a UI timing event. Only a fixed set of labels is accepted, so no
         /// content can reach the log through this door.
         #[qinvokable]
@@ -67,11 +80,15 @@ use core::pin::Pin;
 
 use cxx_qt::{CxxQtType, Initialize, Threading};
 use cxx_qt_lib::QString;
+use popupai_core::markdown;
 use popupai_core::orchestrator::Event;
 use popupai_platform::Command;
 use popupai_platform::shortcut::ShortcutStatus;
+use popupai_security::Secret;
+use zeroize::Zeroizing;
 
 use crate::context;
+use crate::key_input;
 use crate::shortcut_notice;
 use crate::view_model::ViewModel;
 
@@ -79,6 +96,7 @@ use crate::view_model::ViewModel;
 pub struct PopupControllerRust {
     question: QString,
     answer: QString,
+    answer_html: QString,
     error_text: QString,
     status: QString,
     provider_label: QString,
@@ -88,6 +106,7 @@ pub struct PopupControllerRust {
     /// What the portal said about the global shortcut.
     shortcut_notice: String,
     background_answer: bool,
+    needs_key: bool,
     start_visible: bool,
     exit_on_dismiss: bool,
     model: ViewModel,
@@ -113,6 +132,7 @@ impl Initialize for qobject::PopupController {
         self.as_mut().set_exit_on_dismiss(app.exit_on_dismiss);
         let status = QString::from(self.model_status());
         self.as_mut().set_status(status);
+        self.as_mut().refresh_needs_key();
 
         // Commands from later invocations reach QML as a signal, on the Qt thread.
         if let Some(mut commands) = app.take_commands() {
@@ -210,17 +230,19 @@ impl qobject::PopupController {
 
     /// Mirror the view model into the QML properties.
     fn sync(mut self: Pin<&mut Self>) {
-        let (question, answer, error, status) = {
+        let (question, answer, html, error, status) = {
             let model = &self.rust().model;
             (
                 QString::from(model.question.as_str()),
                 QString::from(model.answer.as_str()),
+                QString::from(markdown::render(&model.answer).as_str()),
                 QString::from(model.error.as_str()),
                 QString::from(model.status.as_str()),
             )
         };
         self.as_mut().set_question(question);
         self.as_mut().set_answer(answer);
+        self.as_mut().set_answer_html(html);
         self.as_mut().set_error_text(error);
         self.as_mut().set_status(status);
     }
@@ -249,7 +271,102 @@ impl qobject::PopupController {
             .begin(opening.session);
         self.as_mut()
             .set_background_answer(opening.background_answer);
+        self.as_mut().refresh_needs_key();
         self.sync();
+    }
+
+    /// Ask the secret store whether the current provider still lacks its key, off
+    /// the Qt thread (the store may have to prompt to unlock the wallet).
+    fn refresh_needs_key(self: Pin<&mut Self>) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let orchestrator = app.orchestrator.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn(async move {
+            let needs_key = orchestrator.current_needs_key().await;
+            let _ =
+                qt_thread.queue(move |mut controller| controller.as_mut().set_needs_key(needs_key));
+        });
+    }
+
+    fn cycle_provider(mut self: Pin<&mut Self>) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let Some(info) = app.orchestrator.cycle_provider() else {
+            return;
+        };
+        tracing::info!(provider = %info.id, "provider selected");
+        self.as_mut()
+            .set_provider_label(QString::from(info.label.as_str()));
+        self.as_mut().refresh_needs_key();
+        // Remember the choice, unless the settings file could not be read: it must not
+        // be overwritten with defaults.
+        if let Some(path) = app.config_path.clone() {
+            let mut config = app.orchestrator.config();
+            config.default_provider = Some(info.id);
+            app.runtime.spawn_blocking(move || {
+                if let Err(err) = config.save(&path) {
+                    tracing::warn!("could not remember the provider choice: {err}");
+                }
+            });
+        }
+    }
+
+    fn save_key(mut self: Pin<&mut Self>, key: &QString) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        // The pasted text is wiped from this copy once it has been handed over.
+        let pasted = Zeroizing::new(key.to_string());
+        let checked = match key_input::check(&pasted) {
+            Ok(checked) => checked.to_owned(),
+            Err(message) => {
+                self.as_mut()
+                    .rust_mut()
+                    .get_mut()
+                    .model
+                    .fail_locally(message);
+                self.sync();
+                return;
+            }
+        };
+        let Some(provider) = app.orchestrator.current_provider() else {
+            return;
+        };
+        let secret = Secret::new(checked);
+        let orchestrator = app.orchestrator.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn(async move {
+            let result = orchestrator.save_api_key(&provider.id, secret).await;
+            let outcome = match &result {
+                Ok(()) => {
+                    tracing::info!(provider = %provider.id, "API key saved in the secret store");
+                    Ok(())
+                }
+                Err(err) => {
+                    tracing::warn!(provider = %provider.id, "API key could not be saved");
+                    Err(format!("The key could not be saved: {err}."))
+                }
+            };
+            let _ = qt_thread.queue(move |mut controller| match outcome {
+                Ok(()) => {
+                    controller.as_mut().rust_mut().get_mut().model.clear_error();
+                    controller.as_mut().set_needs_key(false);
+                    controller.sync();
+                }
+                Err(message) => {
+                    controller
+                        .as_mut()
+                        .rust_mut()
+                        .get_mut()
+                        .model
+                        .fail_locally(&message);
+                    controller.sync();
+                }
+            });
+        });
     }
 
     fn trace(self: Pin<&mut Self>, event: &QString) {
@@ -271,6 +388,9 @@ impl qobject::PopupController {
         let Some(app) = context::get() else {
             return;
         };
+        if *self.needs_key() {
+            return; // the key field is shown instead of the question field
+        }
         let text = text.to_string();
         match app.orchestrator.submit(&text) {
             Ok(session) => {

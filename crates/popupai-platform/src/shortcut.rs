@@ -206,32 +206,39 @@ async fn run(
         .err()
         .map(|err| explain_registration(&err));
 
+    // From here on, a failure also says if the registration had been refused: that is
+    // often the real reason (the portal then does not know which application this is).
+    let explain_step = |err: &Error| match &registration {
+        Some(note) => format!("{} ({note})", explain(err)),
+        None => explain(err),
+    };
+
     let portal = GlobalShortcuts::with_connection(connection)
         .await
-        .map_err(|err| explain(&err))?;
+        .map_err(|err| explain_step(&err))?;
     let session = portal
         .create_session(Default::default())
         .await
-        .map_err(|err| explain(&err))?;
+        .map_err(|err| explain_step(&err))?;
 
     // Subscribe before binding so no activation can be missed.
     let mut activated = Box::pin(
         portal
             .receive_activated()
             .await
-            .map_err(|err| explain(&err))?,
+            .map_err(|err| explain_step(&err))?,
     );
     let mut changed = Box::pin(
         portal
             .receive_shortcuts_changed()
             .await
-            .map_err(|err| explain(&err))?,
+            .map_err(|err| explain_step(&err))?,
     );
     let mut closed = Box::pin(
         session
             .receive_closed()
             .await
-            .map_err(|err| explain(&err))?,
+            .map_err(|err| explain_step(&err))?,
     );
 
     let trigger = portal_trigger(&settings.chord);
@@ -243,9 +250,9 @@ async fn run(
             Default::default(),
         )
         .await
-        .map_err(|err| explain(&err))?
+        .map_err(|err| explain_step(&err))?
         .response()
-        .map_err(|err| explain(&err))?;
+        .map_err(|err| explain_step(&err))?;
     let first = bound
         .shortcuts()
         .iter()

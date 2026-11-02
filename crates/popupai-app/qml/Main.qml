@@ -11,13 +11,14 @@ Window {
     // on dismissal instead.
     readonly property bool oneShot: controller.exitOnDismiss
 
-    readonly property int minHeight: 200
-    readonly property int maxHeight: 600
+    readonly property int maxHeight: 560
     property bool wasActive: false
 
     visible: false
-    width: 480
-    height: Math.max(minHeight, Math.min(maxHeight, content.implicitHeight + 32))
+    width: 440
+    // The input stays at the bottom edge and the answer grows above it, so the field
+    // does not move while an answer streams in.
+    height: Math.min(maxHeight, content.implicitHeight + 24)
     color: "transparent"
     title: "PopUpAI"
 
@@ -37,18 +38,27 @@ Window {
     // Used only to write the answer to the clipboard when the user asks for it.
     TextEdit { id: clipboard; visible: false }
 
+    function focusField() {
+        if (controller.needsKey)
+            keyInput.forceActiveFocus()
+        else
+            input.forceActiveFocus()
+    }
+
     function openPopup() {
         controller.open()
         input.text = ""
+        keyInput.text = ""
         wasActive = false
         visible = true
-        input.forceActiveFocus()
+        focusField()
     }
 
     function closePopup(reason) {
         controller.dismiss(reason)
         visible = false
         wasActive = false
+        keyInput.text = ""
         if (oneShot)
             Qt.quit()
     }
@@ -58,6 +68,12 @@ Window {
             return
         controller.submit(input.text)
         input.text = ""
+    }
+
+    function saveKey() {
+        controller.saveKey(keyInput.text)
+        // The pasted key leaves this field at once; the controller wipes its copy.
+        keyInput.text = ""
     }
 
     function copyAnswer() {
@@ -99,10 +115,22 @@ Window {
             openPopup()
     }
 
-    // Commands from later invocations (`popupai --toggle`, `--quit`).
+    // Window-wide keys, whichever field has the focus.
+    Shortcut { sequence: "Esc"; onActivated: popup.closePopup("escape") }
+    Shortcut { sequence: "Ctrl+P"; onActivated: controller.cycleProvider() }
+    Shortcut { sequence: "Ctrl+R"; onActivated: controller.resume() }
+    Shortcut { sequence: "Ctrl+."; onActivated: controller.stop() }
+    Shortcut {
+        sequence: "Ctrl+Shift+C"
+        enabled: controller.answer.length > 0
+        onActivated: popup.copyAnswer()
+    }
+
     Connections {
         target: controller
 
+        // Commands from later invocations (`popupai --toggle`, `--quit`) and from the
+        // global shortcut.
         function onCommand(name) {
             if (name === "toggle") {
                 if (popup.visible)
@@ -119,38 +147,39 @@ Window {
                 Qt.quit()
             }
         }
+
+        // The field to type in changes when a key turns out to be missing or has
+        // just been saved.
+        function onNeedsKeyChanged() {
+            if (popup.visible)
+                popup.focusField()
+        }
     }
 
-    component PillButton: Rectangle {
-        id: pill
-        property alias text: label.text
+    component TextButton: Text {
+        id: button
         signal clicked()
 
-        implicitWidth: label.implicitWidth + 20
-        implicitHeight: 24
-        radius: 12
-        color: area.containsMouse ? Qt.alpha(palette.highlight, 0.25) : Qt.alpha(palette.windowText, 0.08)
+        font.pixelSize: 11
+        color: Qt.alpha(palette.windowText, area.containsMouse ? 0.9 : 0.55)
+        font.underline: area.containsMouse
 
-        Text {
-            id: label
-            anchors.centerIn: parent
-            font.pixelSize: 12
-            color: palette.windowText
-        }
         MouseArea {
             id: area
             anchors.fill: parent
+            anchors.margins: -4
             hoverEnabled: true
-            onClicked: pill.clicked()
+            cursorShape: Qt.PointingHandCursor
+            onClicked: button.clicked()
         }
     }
 
     Rectangle {
         id: panel
         anchors.fill: parent
-        radius: 14
+        radius: 12
         color: palette.window
-        border.color: Qt.alpha(palette.windowText, 0.2)
+        border.color: Qt.alpha(palette.windowText, 0.18)
         border.width: 1
 
         Column {
@@ -158,117 +187,43 @@ Window {
             anchors {
                 left: parent.left
                 right: parent.right
-                top: parent.top
-                margins: 16
+                bottom: parent.bottom
+                margins: 12
             }
-            spacing: 10
+            spacing: 8
 
-            Item {
-                width: parent.width
-                height: brand.implicitHeight
-
-                Text {
-                    id: brand
-                    text: "PopUpAI"
-                    font.bold: true
-                    font.pixelSize: 13
-                    color: palette.windowText
-                }
-                Text {
-                    anchors.left: brand.right
-                    anchors.leftMargin: 10
-                    anchors.right: parent.right
-                    horizontalAlignment: Text.AlignRight
-                    elide: Text.ElideRight
-                    text: controller.providerLabel
-                    font.pixelSize: 12
-                    color: Qt.alpha(palette.windowText, 0.6)
-                }
-            }
-
+            // A problem with the settings or the global shortcut, only when there is one.
             Text {
                 visible: controller.notice.length > 0
                 width: parent.width
                 wrapMode: Text.Wrap
                 text: controller.notice
-                font.pixelSize: 12
+                font.pixelSize: 11
                 color: "#bf616a"
-            }
-
-            Text {
-                visible: controller.backgroundAnswer && controller.status === "idle"
-                width: parent.width
-                text: "A previous answer is ready. Press Ctrl+R to see it."
-                font.pixelSize: 12
-                color: Qt.alpha(palette.windowText, 0.7)
-            }
-
-            Rectangle {
-                width: parent.width
-                height: Math.min(120, Math.max(40, input.contentHeight + 16))
-                radius: 8
-                color: palette.base
-                border.color: input.activeFocus ? palette.highlight : Qt.alpha(palette.windowText, 0.25)
-
-                TextEdit {
-                    id: input
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    color: palette.text
-                    font.pixelSize: 14
-                    wrapMode: TextEdit.Wrap
-                    selectByMouse: true
-                    focus: true
-
-                    Text {
-                        visible: input.text.length === 0 && input.preeditText.length === 0
-                        text: "Ask anything…"
-                        font: input.font
-                        color: Qt.alpha(palette.text, 0.45)
-                    }
-
-                    Keys.onPressed: event => {
-                        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-                        if (event.key === Qt.Key_Escape) {
-                            popup.closePopup("escape")
-                            event.accepted = true
-                        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                                   && !(event.modifiers & Qt.ShiftModifier)) {
-                            popup.submit()
-                            event.accepted = true
-                        } else if (ctrl && event.key === Qt.Key_R) {
-                            controller.resume()
-                            event.accepted = true
-                        } else if (ctrl && event.key === Qt.Key_Period) {
-                            controller.stop()
-                            event.accepted = true
-                        }
-                    }
-                }
             }
 
             Text {
                 visible: controller.question.length > 0
                 width: parent.width
-                wrapMode: Text.Wrap
+                elide: Text.ElideRight
+                maximumLineCount: 1
                 text: controller.question
-                font.pixelSize: 13
-                font.bold: true
-                color: palette.windowText
+                font.pixelSize: 12
+                color: Qt.alpha(palette.windowText, 0.6)
             }
 
             Text {
                 id: thinking
                 visible: controller.status === "streaming" && controller.answer.length === 0
-                text: "Thinking…"
-                font.pixelSize: 13
+                text: "…"
+                font.pixelSize: 16
                 color: Qt.alpha(palette.windowText, 0.6)
 
                 SequentialAnimation on opacity {
                     running: thinking.visible
                     loops: Animation.Infinite
-                    NumberAnimation { from: 1.0; to: 0.3; duration: 700 }
-                    NumberAnimation { from: 0.3; to: 1.0; duration: 700 }
+                    NumberAnimation { from: 1.0; to: 0.25; duration: 600 }
+                    NumberAnimation { from: 0.25; to: 1.0; duration: 600 }
                 }
             }
 
@@ -276,22 +231,27 @@ Window {
                 id: answerView
                 visible: controller.answer.length > 0
                 width: parent.width
-                height: Math.min(answerText.implicitHeight, 300)
+                height: Math.min(answerText.implicitHeight, popup.maxHeight - 120)
                 contentHeight: answerText.implicitHeight
                 clip: true
                 interactive: contentHeight > height
 
-                Text {
+                // The answer is Markdown that the core has already reduced to a small,
+                // attribute-free HTML subset: no image, no link, no raw HTML reaches
+                // this widget (see popupai-core `markdown`).
+                TextEdit {
                     id: answerText
                     width: answerView.width
-                    wrapMode: Text.Wrap
-                    // Plain text on purpose: model output is untrusted, and rich
-                    // text could load remote images. Markdown rendering comes with
-                    // a renderer that refuses them.
-                    textFormat: Text.PlainText
-                    text: controller.answer
+                    readOnly: true
+                    activeFocusOnPress: false  // the question field keeps the keyboard
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                    textFormat: TextEdit.RichText
+                    text: controller.answerHtml
                     font.pixelSize: 13
                     color: palette.windowText
+                    selectionColor: palette.highlight
+                    selectedTextColor: palette.highlightedText
                 }
 
                 onContentHeightChanged: {
@@ -309,26 +269,108 @@ Window {
                 color: "#bf616a"
             }
 
+            Text {
+                visible: controller.backgroundAnswer && controller.status === "idle"
+                width: parent.width
+                text: "A previous answer is ready · Ctrl+R"
+                font.pixelSize: 11
+                color: Qt.alpha(palette.windowText, 0.6)
+            }
+
+            // The one thing that is always there: the field.
+            Rectangle {
+                width: parent.width
+                height: Math.min(120, Math.max(38, (controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
+                radius: 8
+                color: palette.base
+                border.color: (input.activeFocus || keyInput.activeFocus)
+                    ? palette.highlight : Qt.alpha(palette.windowText, 0.2)
+
+                TextEdit {
+                    id: input
+                    visible: !controller.needsKey
+                    anchors.fill: parent
+                    anchors.margins: 9
+                    color: palette.text
+                    font.pixelSize: 14
+                    wrapMode: TextEdit.Wrap
+                    selectByMouse: true
+                    focus: true
+
+                    Text {
+                        visible: input.text.length === 0 && input.preeditText.length === 0
+                        text: "Ask…"
+                        font: input.font
+                        color: Qt.alpha(palette.text, 0.4)
+                    }
+
+                    Keys.onPressed: event => {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                && !(event.modifiers & Qt.ShiftModifier)) {
+                            popup.submit()
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                // Shown instead of the question field when the provider needs an API key
+                // that is not stored yet. Masked, and handed straight to the secret store.
+                TextInput {
+                    id: keyInput
+                    visible: controller.needsKey
+                    anchors.fill: parent
+                    anchors.margins: 9
+                    verticalAlignment: TextInput.AlignVCenter
+                    echoMode: TextInput.Password
+                    inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
+                    color: palette.text
+                    font.pixelSize: 14
+                    selectByMouse: true
+
+                    Text {
+                        visible: keyInput.text.length === 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Paste your API key, then Enter"
+                        font: keyInput.font
+                        color: Qt.alpha(palette.text, 0.4)
+                    }
+
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            popup.saveKey()
+                            event.accepted = true
+                        }
+                    }
+                }
+            }
+
+            // Which model answers, and the few actions that apply right now.
             Item {
                 width: parent.width
-                height: 24
+                height: 14
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Enter send · Shift+Enter newline · Esc close"
-                    font.pixelSize: 11
-                    color: Qt.alpha(palette.windowText, 0.5)
+                TextButton {
+                    anchors.left: parent.left
+                    anchors.right: actions.left
+                    anchors.rightMargin: 8
+                    elide: Text.ElideRight
+                    text: controller.needsKey
+                        ? controller.providerLabel + " · key goes to the system wallet"
+                        : controller.providerLabel
+                    onClicked: controller.cycleProvider()
                 }
-                Row {
-                    anchors.right: parent.right
-                    spacing: 6
 
-                    PillButton {
+                Row {
+                    id: actions
+                    anchors.right: parent.right
+                    spacing: 12
+
+                    TextButton {
                         visible: controller.status === "streaming"
                         text: "Stop"
                         onClicked: controller.stop()
                     }
-                    PillButton {
+                    TextButton {
                         visible: controller.answer.length > 0
                         text: "Copy"
                         onClicked: popup.copyAnswer()
