@@ -5,8 +5,9 @@
   [PLATFORM_COMPATIBILITY.md](../PLATFORM_COMPATIBILITY.md). Progress on
   2026-11-02: S2 passed (an on-demand layer surface gets keyboard focus when shown,
   with no click); S3 passed (an outside click deactivates the window and still
-  reaches the window underneath, on the user's confirmation); S1 placement is still
-  to be confirmed by eye; S4 to S6 are not started.
+  reaches the window underneath, on the user's confirmation); S1 passed (the user
+  confirmed by eye that the popup sits in the bottom-right corner and is readable);
+  S4 to S6 are not started.
 - **Depends on:** [ADR 0001](0001-technology-stack.md)
 
 ## Constraints (Wayland)

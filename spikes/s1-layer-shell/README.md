@@ -62,8 +62,9 @@ What this shows, and what it does not:
   the likeliest explanation, but that is not demonstrated). In run 3 the window was
   deactivated at the moment of the outside click the user was asked to make, and the
   user confirmed that click also worked in the window underneath on the first try.
-- **S1, not confirmed.** The placement has to be confirmed by eye; Qt reports the
-  whole screen as available and cannot see the panel.
+- **S1, passed (on the user's report).** The program cannot see its own position:
+  Qt reports the whole screen as available and knows nothing of the panel. The user
+  confirmed by eye that the window sits in the bottom-right corner.
 - **Local latency is promising:** about 34 ms from show to first frame, and 56 ms
   to focus, on this machine with the window created at start-up (a cold start, not
   yet the warm path the product will use). Run 2 gave 24 ms and 46 ms. These are two runs, not a benchmark.
@@ -103,4 +104,6 @@ clicked once on another window):
 - The user confirmed that this single click was also delivered to the window
   underneath, on the first try. That is a report, not something the program can
   measure, so S3 is recorded as passed on that basis.
-- Still unknown: where the window appeared on screen (S1). Only the user can tell.
+- S1 (placement) was confirmed by the user by eye on a later run of the real popup,
+  which uses the same layer-shell settings: bottom-right corner, readable. That is a
+  report, not a measurement.
