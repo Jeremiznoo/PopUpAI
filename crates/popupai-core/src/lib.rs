@@ -8,3 +8,4 @@ pub mod credentials;
 pub mod orchestrator;
 pub mod request_error;
 pub mod session;
+pub mod shortcut;

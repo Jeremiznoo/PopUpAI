@@ -375,6 +375,11 @@ impl Config {
         Ok(config)
     }
 
+    /// The configured global shortcut, parsed.
+    pub fn shortcut(&self) -> Result<crate::shortcut::Chord, crate::shortcut::ChordError> {
+        self.general.shortcut.parse()
+    }
+
     pub fn provider(&self, id: &str) -> Option<&ProviderEntry> {
         self.providers.iter().find(|p| p.id == id)
     }
@@ -400,12 +405,8 @@ impl Config {
         if self.schema_version != SCHEMA_VERSION {
             bad("schema_version", "unsupported configuration version");
         }
-        let shortcut = &self.general.shortcut;
-        if shortcut.trim().is_empty()
-            || shortcut.chars().count() > 64
-            || shortcut.chars().any(char::is_control)
-        {
-            bad("general.shortcut", "must be 1 to 64 printable characters");
+        if let Err(err) = self.general.shortcut.parse::<crate::shortcut::Chord>() {
+            bad("general.shortcut", &err.to_string());
         }
         let popup = &self.popup;
         if !(320..=1200).contains(&popup.width) {
@@ -729,6 +730,22 @@ mod tests {
             Config::from_toml("[general]\ntheme = sk-proj-abcdefghijklmnopqrstuvwx\n").unwrap_err();
         assert!(matches!(leaky, ConfigError::Parse(_)));
         assert!(!leaky.to_string().contains("sk-proj"), "{leaky}");
+    }
+
+    #[test]
+    fn the_shortcut_is_parsed_and_a_bad_one_is_refused_with_the_reason() {
+        let config = sample();
+        let chord = config.shortcut().expect("the default shortcut is valid");
+        assert_eq!(chord.to_string(), DEFAULT_SHORTCUT);
+
+        let mut config = sample();
+        config.general.shortcut = "SPACE".into();
+        let issues = config.validate().unwrap_err();
+        let issue = issues
+            .iter()
+            .find(|i| i.field == "general.shortcut")
+            .expect("the shortcut is reported");
+        assert!(issue.message.contains("no modifier"), "{}", issue.message);
     }
 
     #[test]
