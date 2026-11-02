@@ -90,8 +90,9 @@ A second invocation sends a D-Bus call to the running instance (single instance
 via the well-known name `io.github.popupai.PopUpAI`, provisional id). Any user
 can bind that command in *System Settings, Keyboard, Shortcuts, Add Command*.
 This works on every desktop and is the documented fallback, not an automatic
-one. The D-Bus interface exposes `Toggle`, `Show` and `Hide` only. It never
-accepts prompt text.
+one. The D-Bus interface exposes `Toggle`, `Show`, `Hide` and `Quit` only. It never
+accepts prompt text: a test introspects the exported interface and asserts that no
+method takes an argument and that there are no properties or signals.
 
 ### 6. System tray: StatusNotifierItem via `ksni`
 

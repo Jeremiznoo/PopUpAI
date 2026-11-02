@@ -44,9 +44,15 @@ All notable changes are documented here. The format follows
   loss of focus, as recorded by its own logs. The dismissal log carries a reason.
 - Spike S1 to S3 (`spikes/s1-layer-shell`) and `tools/fake_ollama.py` to try the
   interface without a model.
+- `popupai-platform`: single instance and remote commands over D-Bus. The application
+  is now resident: `popupai --toggle`, `--background` and `--quit`, and a second launch
+  hands its command to the running instance. The interface has four argument-less
+  methods only, checked by a test that introspects it. Tests run on a private bus.
 
 ### Fixed
 
+- A second launch no longer steals the D-Bus name from the running instance (zbus
+  requests names with AllowReplacement and ReplaceExisting by default).
 - Keyless local providers such as Ollama now work when the system secret store is
   unavailable; providers that need a key still fail with a clear explanation.
 

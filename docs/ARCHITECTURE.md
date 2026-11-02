@@ -20,7 +20,8 @@ recorded in [docs/ADR/](ADR/): [0001 stack](ADR/0001-technology-stack.md),
 | `popupai-core`: request orchestrator (single in-flight request, cancellation, connection reuse, metadata-only logs) | Implemented | 13 unit tests with a scripted provider, plus a log-privacy test in its own binary |
 | Orchestrator with the real adapters | **Not verified** | Tested with a scripted provider; the adapters are tested separately against a local server |
 | `popupai-app`: QML popup, cxx-qt controller, view model, configuration path | Implemented as a first one-shot popup (it opens at start-up and quits when dismissed). It builds, the view model and path logic have 17 unit tests, and it starts and loads its QML with no warnings on a headless platform | Shown on screen on 2026-11-02 with the fake Ollama server. The application's own logs show the full path: a question typed and sent from the keyboard, the answer (209 bytes) streamed to completion, and the popup closed on loss of focus (`reason=focus lost`). The layout, Stop and Copy are **not yet confirmed** |
-| `popupai-platform`: global shortcut, tray, autostart, single instance | Not started | Spikes S4 and S5 touch the user's session and need approval |
+| `popupai-platform`: single instance and remote commands (`--toggle`, `--background`, `--quit`) over D-Bus | Implemented. The app is now resident: dismissing hides the window and a later command shows it with a fresh session | 5 tests on a private `dbus-daemon`, plus `tools/smoke-resident.sh` (19 checks, headless, private bus). Not yet tried on screen across several show and hide cycles |
+| `popupai-platform`: global shortcut, tray, autostart | Not started | Spikes S4 and S5 touch the user's session and need approval |
 | Secret Service backend | Not started | Testable natively now |
 
 ## Component diagram

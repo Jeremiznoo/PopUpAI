@@ -5,8 +5,9 @@
 #   tools/try-popup.sh
 #
 # It uses a temporary configuration and a free port, so it touches neither your real
-# configuration nor anything already listening. The popup is one-shot: it closes
-# when you press Esc, click elsewhere, or after 120 seconds.
+# configuration nor anything already listening. It quits when the popup is dismissed
+# (POPUPAI_EXIT_ON_DISMISS=1) or after 120 seconds. While it runs it holds the D-Bus
+# name io.github.popupai.PopUpAI on your session bus, and releases it on exit.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -55,8 +56,8 @@ for n in 5 4 3 2 1; do
 done
 echo
 
-POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 \
-    timeout 120 target/debug/popupai-app 2>&1 | grep -vE 'sfinae|range_access' || true
+POPUPAI_CONFIG="$tmp/config.toml" POPUPAI_EXIT_ON_DISMISS=1 QT_QPA_PLATFORM=wayland \
+    QT_FORCE_STDERR_LOGGING=1 timeout 120 target/debug/popupai-app 2>&1 | grep -vE 'sfinae|range_access' || true
 
 echo
 echo "--- requests the fake server saw (method and path only, never any content):"

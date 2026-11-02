@@ -26,6 +26,8 @@ pub mod qobject {
         #[qproperty(QString, provider_label, cxx_name = "providerLabel")]
         #[qproperty(QString, notice)]
         #[qproperty(bool, background_answer, cxx_name = "backgroundAnswer")]
+        #[qproperty(bool, start_visible, cxx_name = "startVisible")]
+        #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
         type PopupController = super::PopupControllerRust;
 
         /// The popup was shown: start a fresh session.
@@ -46,6 +48,10 @@ pub mod qobject {
         /// Bring back an answer that finished in the background.
         #[qinvokable]
         fn resume(self: Pin<&mut PopupController>);
+
+        /// A later invocation asked for something: "toggle", "show", "hide" or "quit".
+        #[qsignal]
+        fn command(self: Pin<&mut PopupController>, name: QString);
     }
 
     impl cxx_qt::Threading for PopupController {}
@@ -57,6 +63,7 @@ use core::pin::Pin;
 use cxx_qt::{CxxQtType, Initialize, Threading};
 use cxx_qt_lib::QString;
 use popupai_core::orchestrator::Event;
+use popupai_platform::Command;
 
 use crate::context;
 use crate::view_model::ViewModel;
@@ -70,6 +77,8 @@ pub struct PopupControllerRust {
     provider_label: QString,
     notice: QString,
     background_answer: bool,
+    start_visible: bool,
+    exit_on_dismiss: bool,
     model: ViewModel,
 }
 
@@ -88,8 +97,32 @@ impl Initialize for qobject::PopupController {
                 .as_str(),
         ));
         self.as_mut().set_notice(QString::from(app.notice.as_str()));
+        self.as_mut().set_start_visible(app.start_visible);
+        self.as_mut().set_exit_on_dismiss(app.exit_on_dismiss);
         let status = QString::from(self.model_status());
         self.as_mut().set_status(status);
+
+        // Commands from later invocations reach QML as a signal, on the Qt thread.
+        if let Some(mut commands) = app.take_commands() {
+            let qt_thread = self.qt_thread();
+            app.runtime.spawn(async move {
+                while let Some(command) = commands.recv().await {
+                    let name = match command {
+                        Command::Toggle => "toggle",
+                        Command::Show => "show",
+                        Command::Hide => "hide",
+                        Command::Quit => "quit",
+                    };
+                    tracing::info!(command = %name, "remote command received");
+                    if qt_thread
+                        .queue(move |controller| controller.command(QString::from(name)))
+                        .is_err()
+                    {
+                        break; // the QObject is gone
+                    }
+                }
+            });
+        }
 
         // Deliver orchestrator events to the Qt thread, where the QObject lives.
         let Some(mut events) = app.take_events() else {

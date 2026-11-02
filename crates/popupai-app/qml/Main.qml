@@ -6,10 +6,10 @@ import io.github.popupai
 Window {
     id: popup
 
-    // One-shot until the global shortcut and the tray icon exist: the popup opens
-    // at start-up and the application quits when it is dismissed. Afterwards the
-    // application stays resident and this becomes false.
-    readonly property bool oneShot: true
+    // The application stays resident: dismissing hides the window and a later
+    // command shows it again. Development aid: POPUPAI_EXIT_ON_DISMISS=1 quits
+    // on dismissal instead.
+    readonly property bool oneShot: controller.exitOnDismiss
 
     readonly property int minHeight: 200
     readonly property int maxHeight: 600
@@ -39,6 +39,8 @@ Window {
 
     function openPopup() {
         controller.open()
+        input.text = ""
+        wasActive = false
         visible = true
         input.forceActiveFocus()
     }
@@ -46,6 +48,7 @@ Window {
     function closePopup(reason) {
         controller.dismiss(reason)
         visible = false
+        wasActive = false
         if (oneShot)
             Qt.quit()
     }
@@ -72,7 +75,32 @@ Window {
             closePopup("focus lost")
     }
 
-    Component.onCompleted: openPopup()
+    Component.onCompleted: {
+        if (controller.startVisible)
+            openPopup()
+    }
+
+    // Commands from later invocations (`popupai --toggle`, `--quit`).
+    Connections {
+        target: controller
+
+        function onCommand(name) {
+            if (name === "toggle") {
+                if (popup.visible)
+                    popup.closePopup("toggle")
+                else
+                    popup.openPopup()
+            } else if (name === "show") {
+                if (!popup.visible)
+                    popup.openPopup()
+            } else if (name === "hide") {
+                if (popup.visible)
+                    popup.closePopup("hide")
+            } else if (name === "quit") {
+                Qt.quit()
+            }
+        }
+    }
 
     component PillButton: Rectangle {
         id: pill

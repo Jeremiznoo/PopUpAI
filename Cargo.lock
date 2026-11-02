@@ -1134,6 +1134,7 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "popupai-core",
+ "popupai-platform",
  "popupai-security",
  "tokio",
  "tracing",
@@ -1161,7 +1162,6 @@ version = "0.0.1"
 dependencies = [
  "thiserror 2.0.21",
  "tokio",
- "tracing",
  "zbus",
 ]
 

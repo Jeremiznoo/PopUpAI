@@ -127,8 +127,21 @@ This happened once during development and was caught by the full test run.
 
 ## Running the application
 
-The application is a one-shot popup for now: it opens at start-up and quits when
-dismissed. The global shortcut and tray icon come next.
+The application is resident. The first process keeps running; dismissing the popup
+hides it, and a later `popupai --toggle` shows it again with a fresh session. A second
+launch never starts a second PopUpAI: it hands its command to the running one over
+D-Bus and exits. While it runs it holds the name `io.github.popupai.PopUpAI` on the
+session bus (a provisional id), and releases it on exit.
+
+```text
+popupai              show the popup (starts PopUpAI if needed)
+popupai --toggle     show it if hidden, hide it if shown
+popupai --background start hidden (for autostart)
+popupai --quit       stop the running instance
+```
+
+The global shortcut and tray icon come next; until then `--toggle` is how you bring
+the popup back, and `--quit` (or Ctrl+C in its terminal) is how you stop it.
 
 1. **A configuration with a provider.** There is no settings screen yet, so write
    one by hand at `~/.config/popupai/config.toml` (or point `POPUPAI_CONFIG` at a
@@ -150,7 +163,12 @@ dismissed. The global shortcut and tray icon come next.
 
    Or run `tools/try-popup.sh`: it builds, starts the fake server on a free port
    with a temporary configuration, prints what to try, counts down five seconds so
-   you are ready, runs the popup, and stops everything it started when it exits.
+   you are ready, runs the popup (quitting when it is dismissed, through
+   `POPUPAI_EXIT_ON_DISMISS=1`), and stops everything it started when it exits.
+
+   `tools/smoke-resident.sh` checks the resident behaviour headlessly, on a private
+   D-Bus bus and the Qt `offscreen` platform, so it touches neither your session bus
+   nor your screen.
 
 3. **Run it.**
 

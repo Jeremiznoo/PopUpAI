@@ -6,36 +6,61 @@
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use popupai_core::orchestrator::{Event, Orchestrator};
+use popupai_platform::Command;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::UnboundedReceiver;
 
-pub struct AppContext {
+/// Everything `main` hands over when it builds the context.
+pub struct Parts {
     pub orchestrator: Orchestrator,
     pub runtime: Handle,
     /// A problem to show to the user at start-up (for example an unreadable
     /// configuration file). Empty when there is none.
     pub notice: String,
+    /// Whether the popup shows as soon as the application starts.
+    pub start_visible: bool,
+    /// Development aid: quit when the popup is dismissed instead of staying
+    /// resident (`POPUPAI_EXIT_ON_DISMISS=1`).
+    pub exit_on_dismiss: bool,
+    pub events: UnboundedReceiver<Event>,
+    /// Commands from later invocations (`--toggle`, `--quit`), over D-Bus.
+    pub commands: Option<UnboundedReceiver<Command>>,
+}
+
+pub struct AppContext {
+    pub orchestrator: Orchestrator,
+    pub runtime: Handle,
+    pub notice: String,
+    pub start_visible: bool,
+    pub exit_on_dismiss: bool,
     events: Mutex<Option<UnboundedReceiver<Event>>>,
+    commands: Mutex<Option<UnboundedReceiver<Command>>>,
 }
 
 impl AppContext {
-    pub fn new(
-        orchestrator: Orchestrator,
-        runtime: Handle,
-        notice: String,
-        events: UnboundedReceiver<Event>,
-    ) -> Self {
+    pub fn new(parts: Parts) -> Self {
         Self {
-            orchestrator,
-            runtime,
-            notice,
-            events: Mutex::new(Some(events)),
+            orchestrator: parts.orchestrator,
+            runtime: parts.runtime,
+            notice: parts.notice,
+            start_visible: parts.start_visible,
+            exit_on_dismiss: parts.exit_on_dismiss,
+            events: Mutex::new(Some(parts.events)),
+            commands: Mutex::new(parts.commands),
         }
     }
 
     /// The event stream can be taken once, by the controller.
     pub fn take_events(&self) -> Option<UnboundedReceiver<Event>> {
         self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    /// The command stream can be taken once, by the controller.
+    pub fn take_commands(&self) -> Option<UnboundedReceiver<Command>> {
+        self.commands
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()

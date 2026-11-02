@@ -16,6 +16,7 @@ all = { level = "warn", priority = -1 }
 
 [dependencies]
 popupai-core = { path = "../popupai-core" }
+popupai-platform = { path = "../popupai-platform" }
 popupai-security = { path = "../popupai-security" }
 cxx = "1"
 cxx-qt = "0.10"

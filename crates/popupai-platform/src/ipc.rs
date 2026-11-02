@@ -143,15 +143,12 @@ pub async fn claim(bus: &Bus) -> Result<Claim, IpcError> {
         .build()
         .await;
     match served {
-        Ok(connection) => {
-            tracing::info!(name = BUS_NAME, "claimed the instance name");
-            Ok(Claim::Primary {
-                instance: Instance {
-                    _connection: connection,
-                },
-                commands: receiver,
-            })
-        }
+        Ok(connection) => Ok(Claim::Primary {
+            instance: Instance {
+                _connection: connection,
+            },
+            commands: receiver,
+        }),
         Err(zbus::Error::NameTaken) => {
             let connection = builder(bus)?.build().await.map_err(bus_error)?;
             Ok(Claim::Existing(Existing { connection }))
