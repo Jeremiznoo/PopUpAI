@@ -192,6 +192,11 @@ the popup back, and `--quit` (or Ctrl+C in its terminal) is how you stop it.
    appearance from the application's own timing logs (fixed labels only), then leaves
    the popup up for you to ask a question. It holds the D-Bus name on your session bus
    while it runs.
+   It prints nothing from the first show to the end, because output in the hosting
+   terminal could itself disturb the focus. For a decisive test of whether the popup
+   ever loses focus on its own, run it unattended, with nobody at the machine:
+   `UNATTENDED=1 COUNTDOWN=60 FINAL_SECONDS=10 tools/try-resident.sh`. Its verdict counts
+   every closure that was not the scripted Hide.
 
 3. **Run it.**
 

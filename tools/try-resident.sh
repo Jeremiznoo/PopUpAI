@@ -3,6 +3,9 @@
 #
 #   tools/try-resident.sh [cycles]      (default: 5 automatic show/hide cycles)
 #   COUNTDOWN=30 tools/try-resident.sh  (seconds before the first show; default 5)
+#   UNATTENDED=1 COUNTDOWN=60 FINAL_SECONDS=10 tools/try-resident.sh
+#       the decisive test of whether the popup ever loses focus on its own: nobody
+#       may touch the keyboard or mouse; ends with a count of spontaneous closures.
 #
 # It starts PopUpAI hidden, as autostart would, against a fake Ollama server and a
 # temporary configuration. After a countdown it shows and hides the popup by itself
@@ -69,19 +72,35 @@ for _ in $(seq 1 60); do
 done
 grep -q "claimed the instance name" "$tmp/app.log" || { echo "PopUpAI did not start:"; cat "$tmp/app.log"; exit 1; }
 
-cat <<EOF
+if [ "${UNATTENDED:-0}" = 1 ]; then
+    cat <<EOF
+
+UNATTENDED RUN. PopUpAI is running hidden. After the countdown the popup will appear and
+disappear by itself $cycles times, then stay up for ${FINAL_SECONDS:-25} seconds, with nobody
+touching anything.
+
+  PLEASE STEP AWAY from the keyboard and the mouse now, and do not touch them until the
+  results appear here. Any key press or click would corrupt the test: it exists to show
+  whether the popup ever loses focus on its own.
+
+Nothing will be printed until it is all over.
+
+EOF
+else
+    cat <<EOF
 
 PopUpAI is running hidden. After the countdown the popup will appear and disappear by
-itself $cycles times (about 4 seconds per cycle), then stay up for 25 seconds.
+itself $cycles times (about 4 seconds per cycle), then stay up for ${FINAL_SECONDS:-25} seconds.
 
   - During the cycles: just watch the bottom-right corner. Does it show up every
     time, in the same place, ready for typing? Please do not click or type.
-  - During the last 25 seconds: type a question and press Enter, try Ctrl+. while the
+  - During the last seconds: type a question and press Enter, try Ctrl+. while the
     answer streams, then click on another window (or press Esc).
 
 Nothing will be printed until it is all over. The results appear at the end.
 
 EOF
+fi
 for n in $(seq "${COUNTDOWN:-5}" -1 1); do
     printf 'Starting in %s...  \r' "$n"
     sleep 1
@@ -96,7 +115,7 @@ for _ in $(seq 1 "$cycles"); do
 done
 
 call Show
-for _ in $(seq 1 250); do
+for _ in $(seq 1 $(( ${FINAL_SECONDS:-25} * 10 ))); do
     # The popup closes itself on focus loss or Esc: stop waiting once that happens.
     [ "$(grep -c 'popup dismissed' "$tmp/app.log")" -gt "$cycles" ] && break
     sleep 0.1
@@ -110,7 +129,7 @@ cp "$tmp/app.log" target/try-resident.log
 
 echo
 echo "================ timings (local application only) ================"
-LOG="$tmp/app.log" CYCLES="$cycles" python3 -I - <<'PY'
+LOG="$tmp/app.log" CYCLES="$cycles" UNATTENDED="${UNATTENDED:-0}" python3 -I - <<'PY'
 import os, re, statistics
 from datetime import datetime
 
@@ -155,6 +174,7 @@ if missing:
 print()
 print(f"{'show':>5} {'stayed up':>10}  ended by")
 early = 0
+ended = {}
 for n, r in enumerate(rows, 1):
     t0 = r["cmd"]
     end = next(((t, e) for t, e in events if t > t0 and e.startswith("popup dismissed")), None)
@@ -162,6 +182,7 @@ for n, r in enumerate(rows, 1):
         print(f"{n:>5} {'-':>10}  still up when the application was quit")
         continue
     reason = end[1].split("reason=")[-1]
+    ended[n] = reason
     lived = ms(t0, end[0])
     note = ""
     if n <= cycles and reason == "focus lost":
@@ -169,6 +190,13 @@ for n, r in enumerate(rows, 1):
         note = "   <-- closed itself before the scripted Hide (at 2500 ms)"
     print(f"{n:>5} {lived:8.0f}ms  {reason}{note}")
 print(f"automatic cycles that closed themselves by losing focus: {early} of {cycles}")
+if os.environ.get("UNATTENDED") == "1":
+    spontaneous = {n: r for n, r in ended.items() if r != "hide"}
+    print()
+    if spontaneous:
+        print(f"VERDICT: {len(spontaneous)} of {len(rows)} shows closed on their own with nobody at the machine: {spontaneous}")
+    else:
+        print(f"VERDICT: no spontaneous closure over {len(rows)} shows with nobody at the machine (only the scripted Hide ended them).")
 
 for _, e in events:
     if e.startswith(("request started", "request finished", "request failed")):
