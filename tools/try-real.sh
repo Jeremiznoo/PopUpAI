@@ -63,7 +63,7 @@ sleep "$window"
 
 echo
 echo "=== what the application reported (metadata only) ==="
-grep -E "provider selected|tray|global shortcut|popup opened|request started|request finished|request failed|popup dismissed|ui event=(active|inactive)|WARN|ERROR" "$log" \
+grep -E "provider selected|tray|global shortcut|shortcut settings|remote command|popup opened|request started|request finished|request failed|popup dismissed|ui event=(active|inactive)|WARN|ERROR" "$log" \
     | grep -vE "sfinae|proxy caching" || true
 echo
 echo "=== what KDE recorded for the shortcut (read-only) ==="
