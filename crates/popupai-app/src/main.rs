@@ -159,6 +159,8 @@ fn main() -> ExitCode {
     // Commands come from two places: later invocations (D-Bus) and the global
     // shortcut (the desktop portal). They meet in one channel.
     let shortcut_chord = config.shortcut();
+    // Keeps the tray icon for as long as the application runs.
+    let mut tray = None;
     let (commands, shortcut) = match commands {
         Some(mut remote) => {
             let (merged, merged_rx) = unbounded_channel();
@@ -170,6 +172,18 @@ fn main() -> ExitCode {
                     }
                 }
             });
+            if std::env::var_os("POPUPAI_NO_TRAY").is_some_and(|v| v == "1") {
+                tracing::info!("tray icon disabled by POPUPAI_NO_TRAY");
+            } else {
+                match runtime.block_on(popupai_platform::tray::spawn(merged.clone())) {
+                    Ok(handle) => {
+                        tracing::info!("tray icon shown");
+                        tray = Some(handle);
+                    }
+                    // Not every desktop has a tray: the shortcut and the command still work.
+                    Err(err) => tracing::warn!("{err}"),
+                }
+            }
             let shortcut = if std::env::var_os("POPUPAI_NO_SHORTCUT").is_some_and(|v| v == "1") {
                 tracing::info!("global shortcut disabled by POPUPAI_NO_SHORTCUT");
                 None
@@ -227,6 +241,8 @@ fn main() -> ExitCode {
         commands,
         shortcut,
     }));
+
+    let _tray = tray;
 
     let mut app = QGuiApplication::new();
     let mut engine = QQmlApplicationEngine::new();

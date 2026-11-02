@@ -1,6 +1,6 @@
 [package]
 name = "popupai-platform"
-description = "PopUpAI desktop integration without Qt: single instance, remote commands, the global shortcut and the secret store over D-Bus."
+description = "PopUpAI desktop integration without Qt: single instance, remote commands, the global shortcut, the tray icon and the secret store over D-Bus."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -13,6 +13,7 @@ popupai-core = { path = "../popupai-core" }
 popupai-security = { path = "../popupai-security" }
 ashpd.workspace = true
 futures-util.workspace = true
+ksni.workspace = true
 secret-service.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }

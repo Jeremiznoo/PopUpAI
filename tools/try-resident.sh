@@ -63,7 +63,7 @@ call() { # call Show|Hide
         /io/github/jeremiznoo/PopUpAI "io.github.jeremiznoo.PopUpAI.$1"
 }
 
-POPUPAI_NO_SHORTCUT=1 XDG_CONFIG_HOME="$tmp/xdg" POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 \
+POPUPAI_NO_SHORTCUT=1 POPUPAI_NO_TRAY=1 XDG_CONFIG_HOME="$tmp/xdg" POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 \
     "$bin" --background >"$tmp/app.log" 2>&1 &
 app=$!
 for _ in $(seq 1 60); do

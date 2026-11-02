@@ -80,6 +80,7 @@ check "it starts without showing the popup" exactly "popup opened" 0
 # No secret store and no desktop portal exist on the private bus. Both absences must be
 # reported, not crash the application or hang it.
 check "the global shortcut failure is reported, not fatal" wait_for "global shortcut unavailable"
+check "with no StatusNotifier host, the tray is reported missing, not fatal" wait_for "no system tray is available"
 check "with no key stored, the local provider is the one selected" wait_for 'provider selected provider="ollama"'
 
 echo "2. a second launch hands its command over and exits"
