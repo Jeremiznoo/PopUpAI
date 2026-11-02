@@ -57,13 +57,27 @@ What this shows, and what it does not:
   when it is mapped. No key was typed during the run, so delivery of typed keys is
   not confirmed yet.
 - **S3, not established.** The window lost focus 250 ms later. No pointer event
-  reached the window and no key was typed. Whether a click elsewhere caused it is
-  unknown, and a human click within 250 ms is unlikely. The cause is unidentified:
-  it could be something that re-took focus, or an effect of how the program was
-  launched. A rerun with `--keep-on-focus-loss` is needed to see whether focus
-  comes back and what the pattern is.
+  reached the window and no key was typed. Run 2 below did not repeat it, so it is
+  not systematic. The cause of run 1's loss is unidentified (an external event is
+  the likeliest explanation, but that is not demonstrated). A deliberate click on
+  another window has not been tested yet.
 - **S1, not confirmed.** The placement has to be confirmed by eye; Qt reports the
   whole screen as available and cannot see the panel.
 - **Local latency is promising:** about 34 ms from show to first frame, and 56 ms
   to focus, on this machine with the window created at start-up (a cold start, not
-  yet the warm path the product will use). These are single runs, not a benchmark.
+  yet the warm path the product will use). Run 2 gave 24 ms and 46 ms. These are two runs, not a benchmark.
+
+**Run 2** (`--interactivity ondemand --keep-on-focus-loss --seconds 12`, same
+launch context, nothing touched during the run):
+
+```
+[    68 ms] showing the window
+[    92 ms] first frame presented 24 ms after being shown
+[   114 ms] active=1
+[   114 ms] became active 46 ms after being shown, without any click
+[  2918 ms] after 3 s: active=1, size=480x200, screen=eDP-1
+[ 11863 ms] SUMMARY reason="timeout" shown_to_active_ms=46 keys=0 ever_active=1
+```
+
+The window became active again with no click and stayed active for the whole run:
+no deactivation, size 480x200 as requested, on output `eDP-1`.

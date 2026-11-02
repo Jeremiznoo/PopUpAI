@@ -12,8 +12,8 @@ exercised · ⬜ planned, not started · ❌ not supported.
 |---|---|---|---|---|---|
 | Global shortcut | 🟡 portal v2 present (KDE backend) | ⬜ | ⬜ portal exists on GNOME 48+ **(assumption)** | ⬜ | ⬜ |
 | Corner placement | 🟡 `wlr-layer-shell` v5 advertised | ⬜ via `xcb`; dev machine can only test through XWayland | ❌ Mutter is not known to implement layer-shell **(assumption)** | ⬜ | ⬜ |
-| Initial keyboard focus | 🟡 first run: active 56 ms after show, no click; typed keys not yet confirmed | ⬜ | ⬜ | ⬜ | ⬜ |
-| Outside-click dismissal | ⬜ not established: focus was lost after 250 ms for an unidentified reason | ⬜ | ⬜ | ⬜ | ⬜ |
+| Initial keyboard focus | 🟡 two runs: active 56 and 46 ms after show, no click; typed keys not yet confirmed | ⬜ | ⬜ | ⬜ | ⬜ |
+| Outside-click dismissal | ⬜ not established: one run lost focus after 250 ms unprompted, another stayed active for 12 s; a deliberate outside click is untested | ⬜ | ⬜ | ⬜ | ⬜ |
 | System tray | 🟡 StatusNotifierWatcher present | ⬜ | ⬜ needs an extension **(assumption)** | ⬜ | ⬜ |
 | Secret storage | 🟡 `ksecretd` serves `org.freedesktop.secrets` | ⬜ | ⬜ | ⬜ Credential Manager | ⬜ Keychain |
 | Autostart | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
@@ -22,8 +22,8 @@ exercised · ⬜ planned, not started · ❌ not supported.
 ## Spike log
 
 Observations from [spikes/s1-layer-shell](../spikes/s1-layer-shell/README.md), on KDE
-Plasma 6.8.2 Wayland, Qt 6.11.2, LayerShellQt 6.8.2, one monitor. Preliminary: one
-run so far, with open questions listed there. `Shell::useLayerShell()` is deprecated
+Plasma 6.8.2 Wayland, Qt 6.11.2, LayerShellQt 6.8.2, one monitor. Preliminary: two
+runs so far, with open questions listed there. `Shell::useLayerShell()` is deprecated
 since Qt 6.6 and is not needed.
 
 ## Notes
