@@ -76,6 +76,18 @@ Disk use after the first build: about 1.4 GB in `target/` (git-ignored) and abou
   `ld.bfd`, but a build with a real QML module may need `lld` or `mold`. Install
   `lld` if the first QML build fails to link.
 
+- **Unexplained loss of focus.** The popup closes when it loses keyboard focus. In an
+  automatic run (`tools/try-resident.sh`, nobody supposed to touch anything) 3 of 6
+  dismissals were `focus lost`, and one spike run had lost focus 250 ms after showing,
+  while two other runs stayed active. The cause is unknown. The leading hypothesis is
+  that terminal output in the application hosting the test makes it take the focus;
+  `tools/try-resident.sh` now prints nothing during the cycles and keeps its log in
+  `target/try-resident.log` so this can be tested. Until it is explained, the claim
+  that the popup reliably keeps focus is not made.
+- **Cold first show.** The first show after start took 158 ms to become active, above
+  the 150 ms target; later shows took under 10 ms. Pre-creating the window
+  surface at start-up is the obvious remedy, not done yet.
+
 ### Not verified
 
 - **No provider has been called for real.** Request and response formats were

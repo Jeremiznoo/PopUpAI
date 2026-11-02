@@ -5,12 +5,18 @@
 #
 # It starts PopUpAI hidden, as autostart would, against a fake Ollama server and a
 # temporary configuration. After a countdown it shows and hides the popup by itself
-# (over D-Bus, like `popupai --toggle` would), measures how long each appearance takes
-# from the application's own timing logs, then shows it a last time for you to ask a
-# real question. Everything it starts is stopped on exit.
+# (over D-Bus, like `popupai --toggle` would), then shows it a last time for you to ask
+# a real question. From the first show to the end it prints NOTHING: terminal output
+# can make the window that hosts the terminal take the keyboard focus, which would
+# close the popup (it closes when it loses focus) and corrupt the measurement.
+#
+# Afterwards it prints, from the application's own timing logs: the latency of each
+# appearance, how long each one stayed up and what ended it, and where the full log
+# was kept (target/try-resident.log). Timings cover the local application only; the
+# compositor's own display latency and the model's latency are separate.
 #
 # While it runs it holds the D-Bus name io.github.popupai.PopUpAI on your session bus.
-# Timings cover the local application only; the model's own latency is separate.
+# Everything it starts is stopped on exit.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -64,30 +70,30 @@ grep -q "claimed the instance name" "$tmp/app.log" || { echo "PopUpAI did not st
 
 cat <<EOF
 
-PopUpAI is running hidden. In a moment the popup will appear and disappear by itself
-$cycles times (about 4 seconds per cycle). Just watch the bottom-right corner:
-does it show up every time, in the same place, ready for typing?
-Then it stays up for you to ask a real question.
+PopUpAI is running hidden. After the countdown the popup will appear and disappear by
+itself $cycles times (about 4 seconds per cycle), then stay up for 25 seconds.
+
+  - During the cycles: just watch the bottom-right corner. Does it show up every
+    time, in the same place, ready for typing? Please do not click or type.
+  - During the last 25 seconds: type a question and press Enter, try Ctrl+. while the
+    answer streams, then click on another window (or press Esc).
+
+Nothing will be printed until it is all over. The results appear at the end.
 
 EOF
 for n in 5 4 3 2 1; do
     printf 'Starting in %s...\r' "$n"
     sleep 1
 done
-echo
+echo "Running... (silent until the end)"
 
-for i in $(seq 1 "$cycles"); do
-    printf 'cycle %s/%s: show... ' "$i" "$cycles"
+for _ in $(seq 1 "$cycles"); do
     call Show
     sleep 2.5
-    printf 'hide\n'
     call Hide
     sleep 1.5
 done
 
-echo
-echo "Last time: the popup stays up for 25 seconds. Type a question and press Enter,"
-echo "try Ctrl+. while the answer streams, then click on another window (or press Esc)."
 call Show
 for _ in $(seq 1 250); do
     # The popup closes itself on focus loss or Esc: stop waiting once that happens.
@@ -98,12 +104,16 @@ sleep 0.3
 "$bin" --quit || true
 sleep 0.5
 
+mkdir -p target
+cp "$tmp/app.log" target/try-resident.log
+
 echo
 echo "================ timings (local application only) ================"
-LOG="$tmp/app.log" python3 -I - <<'PY'
+LOG="$tmp/app.log" CYCLES="$cycles" python3 -I - <<'PY'
 import os, re, statistics
 from datetime import datetime
 
+cycles = int(os.environ["CYCLES"])
 pat = re.compile(r"^(\S+Z)\s+\w+\s+(.*)$")
 events = []
 for line in open(os.environ["LOG"], errors="replace"):
@@ -141,14 +151,30 @@ missing = [n for n, r in enumerate(rows, 1) if "active" not in r]
 if missing:
     print(f"WARNING: the popup did not become active after show(s) {missing}")
 
-hides = sum(1 for _, e in events if e.startswith("popup dismissed"))
-lost = [e for _, e in events if "reason=focus lost" in e]
-print(f"dismissals: {hides} (focus lost: {len(lost)})")
+print()
+print(f"{'show':>5} {'stayed up':>10}  ended by")
+early = 0
+for n, r in enumerate(rows, 1):
+    t0 = r["cmd"]
+    end = next(((t, e) for t, e in events if t > t0 and e.startswith("popup dismissed")), None)
+    if end is None:
+        print(f"{n:>5} {'-':>10}  still up when the application was quit")
+        continue
+    reason = end[1].split("reason=")[-1]
+    lived = ms(t0, end[0])
+    note = ""
+    if n <= cycles and reason == "focus lost":
+        early += 1
+        note = "   <-- closed itself before the scripted Hide (at 2500 ms)"
+    print(f"{n:>5} {lived:8.0f}ms  {reason}{note}")
+print(f"automatic cycles that closed themselves by losing focus: {early} of {cycles}")
+
 for _, e in events:
     if e.startswith(("request started", "request finished", "request failed")):
         print("  ", e)
 PY
 
 echo
+echo "Full application log kept in: target/try-resident.log"
 echo "--- requests the fake server saw (method and path only, never any content):"
 cat "$tmp/fake.log"
