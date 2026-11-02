@@ -148,6 +148,10 @@ dismissed. The global shortcut and tray icon come next.
    word-by-word answer on `127.0.0.1:11555` and never logs what you type. Use
    `endpoint = "http://127.0.0.1:11555"` and `model = "fake-model"`.
 
+   Or run `tools/try-popup.sh`: it builds, starts the fake server on a free port
+   with a temporary configuration, prints what to try, counts down five seconds so
+   you are ready, runs the popup, and stops everything it started when it exits.
+
 3. **Run it.**
 
    ```bash
@@ -179,10 +183,9 @@ Things to know while developing:
 ## Running the app on the desktop
 
 Running the app for real touches your session. Each of these is approved
-beforehand. The spike windows have been shown three times with approval; the real
-popup has not been shown yet:
+beforehand. The spike windows and the real popup (against a fake Ollama server)
+have been shown with approval. Still to come:
 
-- The first window of the real popup (bottom-right corner).
 - A user-level launcher at `~/.local/share/applications/<app-id>.desktop`, which
   the shortcut portal may need to name the app.
 - A global shortcut entry in KDE's shortcut settings, created through the portal

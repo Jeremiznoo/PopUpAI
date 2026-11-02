@@ -39,7 +39,9 @@ All notable changes are documented here. The format follows
   cxx-qt controller. It is placed with the `org.kde.layershell` QML module
   (bottom-right, overlay layer, keyboard focus on demand), follows the Plasma
   colour scheme, and shows the answer as plain text on purpose, since model output
-  is untrusted. It starts and loads headless; it has not been shown on screen yet.
+  is untrusted. It was shown on screen against a fake Ollama server: a question was
+  sent from the keyboard, the answer streamed to completion and the popup closed on
+  loss of focus, as recorded by its own logs. The dismissal log carries a reason.
 - Spike S1 to S3 (`spikes/s1-layer-shell`) and `tools/fake_ollama.py` to try the
   interface without a model.
 
