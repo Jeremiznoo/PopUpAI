@@ -164,6 +164,12 @@ impl SessionManager {
         }
     }
 
+    /// Apply new settings. Sessions already in progress keep running; the new
+    /// policy is used from the next dismissal on.
+    pub fn set_policy(&mut self, policy: SessionPolicy) {
+        self.policy = policy;
+    }
+
     pub fn active(&self) -> Option<&Session> {
         self.active.as_ref()
     }
