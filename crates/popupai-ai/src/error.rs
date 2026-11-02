@@ -14,6 +14,10 @@ pub enum ProviderError {
     MissingApiKey,
     #[error("rate limited by the provider")]
     RateLimited { retry_after: Option<Duration> },
+    /// Nothing is listening, or the host could not be reached at all. For a
+    /// local provider this usually means "the server is not running".
+    #[error("could not reach the server")]
+    Unreachable,
     #[error("network error: {0}")]
     Network(String),
     #[error("the request timed out")]
@@ -42,7 +46,7 @@ pub(crate) fn from_reqwest(err: reqwest::Error) -> ProviderError {
     if err.is_timeout() {
         ProviderError::Timeout
     } else if err.is_connect() {
-        ProviderError::Network("could not connect to the server".into())
+        ProviderError::Unreachable
     } else {
         ProviderError::Network(redact(&err.to_string()))
     }

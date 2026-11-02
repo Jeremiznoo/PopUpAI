@@ -326,7 +326,7 @@ async fn invalid_requests_and_unusable_keys_fail_before_any_network_call() {
 }
 
 #[tokio::test]
-async fn an_unreachable_server_is_a_network_error() {
+async fn a_server_that_is_not_running_is_reported_as_unreachable() {
     let port = {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.local_addr().unwrap().port()
@@ -336,10 +336,7 @@ async fn an_unreachable_server_is_a_network_error() {
     let provider = OllamaProvider::new(ProviderConfig::new(endpoint)).unwrap();
 
     let error = err(provider.list_models().await);
-    assert!(
-        matches!(&error, ProviderError::Network(m) if m.contains("could not connect")),
-        "{error}"
-    );
+    assert!(matches!(error, ProviderError::Unreachable), "{error}");
 }
 
 // ------------------------------------------------- streaming failure modes
