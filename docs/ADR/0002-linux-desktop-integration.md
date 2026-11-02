@@ -2,7 +2,9 @@
 
 - **Status:** Proposed, 2026-11-02. Every mechanism below is **unproven** until
   its spike passes; results go into
-  [PLATFORM_COMPATIBILITY.md](../PLATFORM_COMPATIBILITY.md).
+  [PLATFORM_COMPATIBILITY.md](../PLATFORM_COMPATIBILITY.md). Progress on
+  2026-11-02: S2 passed (an on-demand layer surface gets keyboard focus when shown,
+  with no click); S1 and S3 are partly observed; S4 to S6 are not started.
 - **Depends on:** [ADR 0001](0001-technology-stack.md)
 
 ## Constraints (Wayland)
