@@ -1,0 +1,31 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Build and packaging output
+/build/
+/dist/
+*.AppImage
+*.rpm
+*.flatpak
+.flatpak-builder/
+
+# Qt / QML generated
+*.qmlc
+*.jsc
+
+# Secrets: never commit. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Editor, OS and machine-local files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.claude/settings.local.json
+*.log
