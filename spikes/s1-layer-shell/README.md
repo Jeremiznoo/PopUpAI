@@ -56,12 +56,12 @@ What this shows, and what it does not:
   with no click, so KWin grants keyboard focus to an on-demand layer surface when
   it is mapped. In run 3, 36 typed keys reached the input field with no mouse press
   inside the window (run 3 below).
-- **S3, not established.** The window lost focus 250 ms later. No pointer event
+- **S3, passed (on the user's confirmation).** In run 1 the window lost focus 250 ms later. No pointer event
   reached the window and no key was typed. Run 2 below did not repeat it, so it is
   not systematic. The cause of run 1's loss is unidentified (an external event is
   the likeliest explanation, but that is not demonstrated). In run 3 the window was
-  deactivated at the moment of the outside click the user was asked to make. That
-  the click also reached the target window is not confirmed yet.
+  deactivated at the moment of the outside click the user was asked to make, and the
+  user confirmed that click also worked in the window underneath on the first try.
 - **S1, not confirmed.** The placement has to be confirmed by eye; Qt reports the
   whole screen as available and cannot see the panel.
 - **Local latency is promising:** about 34 ms from show to first frame, and 56 ms
@@ -100,5 +100,7 @@ clicked once on another window):
 - The window stayed active while typing (about 14 s) and became inactive at
   23.6 s, which matches the outside click (S3). That is an inference from timing and
   the user's instructions, not an observation of the click itself.
-- Still unknown: whether that click was also delivered to the window underneath, and
-  where the window appeared on screen. Only the user can tell.
+- The user confirmed that this single click was also delivered to the window
+  underneath, on the first try. That is a report, not something the program can
+  measure, so S3 is recorded as passed on that basis.
+- Still unknown: where the window appeared on screen (S1). Only the user can tell.
