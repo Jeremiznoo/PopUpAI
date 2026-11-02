@@ -188,6 +188,29 @@ impl Inner {
     }
 }
 
+/// One provider as the popup shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderInfo {
+    pub id: String,
+    /// Name and model, for display.
+    pub label: String,
+    /// The service cannot be used without an API key.
+    pub requires_key: bool,
+}
+
+fn info_of(entry: &ProviderEntry) -> ProviderInfo {
+    let model = entry.effective_model();
+    ProviderInfo {
+        id: entry.id.clone(),
+        label: if model.is_empty() {
+            entry.display_name().to_owned()
+        } else {
+            format!("{} \u{b7} {model}", entry.display_name())
+        },
+        requires_key: entry.kind.requires_key(),
+    }
+}
+
 /// A cheap-to-clone handle. All clones share the same state.
 #[derive(Clone)]
 pub struct Orchestrator {
@@ -249,6 +272,86 @@ impl Orchestrator {
             state.selected = Some(id.to_owned());
         }
         known
+    }
+
+    /// Every configured provider, in order.
+    pub fn providers(&self) -> Vec<ProviderInfo> {
+        self.inner
+            .state()
+            .config
+            .providers
+            .iter()
+            .map(info_of)
+            .collect()
+    }
+
+    /// The provider the next question would use.
+    pub fn current_provider(&self) -> Option<ProviderInfo> {
+        let state = self.inner.state();
+        state
+            .selected
+            .as_deref()
+            .and_then(|id| state.config.provider(id))
+            .or_else(|| state.config.default_provider())
+            .map(info_of)
+    }
+
+    /// Switch to the next provider in the list (wrapping around) and return it.
+    pub fn cycle_provider(&self) -> Option<ProviderInfo> {
+        let mut state = self.inner.state();
+        let current = state
+            .selected
+            .as_deref()
+            .and_then(|id| state.config.provider(id))
+            .or_else(|| state.config.default_provider())
+            .map(|entry| entry.id.clone());
+        let providers = &state.config.providers;
+        let position = current
+            .as_deref()
+            .and_then(|id| providers.iter().position(|p| p.id == id));
+        let next = providers.get(position.map_or(0, |i| (i + 1) % providers.len()))?;
+        let (id, info) = (next.id.clone(), info_of(next));
+        state.selected = Some(id);
+        Some(info)
+    }
+
+    /// Without an explicit choice, use the first provider that can work right now:
+    /// one whose key is stored, or one that needs none (a local server). The order
+    /// of the configuration decides, so a stored key wins over a local model that
+    /// comes after it.
+    pub async fn auto_select(&self) {
+        let candidates: Vec<(String, bool)> = {
+            let state = self.inner.state();
+            if state.selected.is_some() || state.config.default_provider.is_some() {
+                return;
+            }
+            state
+                .config
+                .providers
+                .iter()
+                .map(|p| (p.id.clone(), p.kind.requires_key()))
+                .collect()
+        };
+        for (id, requires_key) in candidates {
+            if !requires_key || self.has_api_key(&id).await.unwrap_or(false) {
+                self.select_provider(&id);
+                return;
+            }
+        }
+    }
+
+    /// The current provider needs an API key and none is stored (or the store cannot
+    /// be read, in which case the user needs to hear about it too).
+    pub async fn current_needs_key(&self) -> bool {
+        let Some(info) = self.current_provider() else {
+            return false;
+        };
+        info.requires_key && !self.has_api_key(&info.id).await.unwrap_or(false)
+    }
+
+    /// A copy of the settings in use.
+    pub fn config(&self) -> Config {
+        self.inner.state().config.clone()
     }
 
     /// The popup was opened: a fresh, empty session.
@@ -335,18 +438,7 @@ impl Orchestrator {
 
     /// Name and model of the provider the next question would use, for display.
     pub fn provider_label(&self) -> Option<String> {
-        let state = self.inner.state();
-        let entry = state
-            .selected
-            .as_deref()
-            .and_then(|id| state.config.provider(id))
-            .or_else(|| state.config.default_provider())?;
-        let model = entry.effective_model();
-        Some(if model.is_empty() {
-            entry.display_name().to_owned()
-        } else {
-            format!("{} \u{b7} {model}", entry.display_name())
-        })
+        self.current_provider().map(|info| info.label)
     }
 
     pub fn view(&self) -> Option<SessionView> {
@@ -1136,5 +1228,128 @@ mod tests {
         );
 
         assert_eq!(harness(Config::default()).orch.provider_label(), None);
+    }
+
+    fn built_in_config() -> Config {
+        Config::builtin()
+    }
+
+    #[tokio::test]
+    async fn the_provider_list_shows_labels_and_which_ones_need_a_key() {
+        let h = harness(built_in_config());
+        let list: Vec<(String, String, bool)> = h
+            .orch
+            .providers()
+            .into_iter()
+            .map(|p| (p.id, p.label, p.requires_key))
+            .collect();
+        assert_eq!(
+            list,
+            [
+                (
+                    "anthropic".into(),
+                    "Claude \u{b7} claude-haiku-5-5".into(),
+                    true
+                ),
+                ("openai".into(), "OpenAI \u{b7} gpt-6-luna".into(), true),
+                (
+                    "gemini".into(),
+                    "Gemini \u{b7} gemini-3.5-flash-lite".into(),
+                    true
+                ),
+                ("ollama".into(), "Ollama".into(), false),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn cycling_walks_the_list_and_wraps_around() {
+        let h = harness(built_in_config());
+        assert_eq!(h.orch.current_provider().unwrap().id, "anthropic");
+        let seen: Vec<String> = (0..5)
+            .map(|_| h.orch.cycle_provider().unwrap().id)
+            .collect();
+        assert_eq!(seen, ["openai", "gemini", "ollama", "anthropic", "openai"]);
+        assert_eq!(h.orch.current_provider().unwrap().id, "openai");
+        assert!(harness(Config::default()).orch.cycle_provider().is_none());
+    }
+
+    #[tokio::test]
+    async fn auto_select_prefers_a_stored_key_then_falls_back_to_the_local_server() {
+        let h = harness(built_in_config());
+        h.orch.auto_select().await;
+        assert_eq!(
+            h.orch.current_provider().unwrap().id,
+            "ollama",
+            "with no key stored, the keyless local provider is the one that can work"
+        );
+
+        let h = harness(built_in_config());
+        h.orch
+            .save_api_key("gemini", Secret::new("g-key"))
+            .await
+            .unwrap();
+        h.orch.auto_select().await;
+        assert_eq!(h.orch.current_provider().unwrap().id, "gemini");
+    }
+
+    #[tokio::test]
+    async fn auto_select_never_overrides_an_explicit_choice() {
+        let mut config = built_in_config();
+        config.default_provider = Some("openai".into());
+        let h = harness(config);
+        h.orch.auto_select().await;
+        assert_eq!(h.orch.current_provider().unwrap().id, "openai");
+
+        let h = harness(built_in_config());
+        assert!(h.orch.select_provider("gemini"));
+        h.orch.auto_select().await;
+        assert_eq!(h.orch.current_provider().unwrap().id, "gemini");
+    }
+
+    #[tokio::test]
+    async fn a_missing_key_is_detected_and_an_unreadable_store_counts_as_missing() {
+        let h = harness(built_in_config());
+        assert!(h.orch.current_needs_key().await, "no key for Claude yet");
+        h.orch
+            .save_api_key("anthropic", Secret::new("a-key"))
+            .await
+            .unwrap();
+        assert!(!h.orch.current_needs_key().await);
+
+        h.orch.select_provider("ollama");
+        assert!(
+            !h.orch.current_needs_key().await,
+            "a local server needs none"
+        );
+
+        let (orch, _events) = Orchestrator::new(
+            built_in_config(),
+            Arc::new(UnavailableStore::new("test")),
+            Arc::new(DefaultProviderFactory),
+        )
+        .unwrap();
+        assert!(orch.current_needs_key().await);
+    }
+
+    #[tokio::test]
+    async fn an_empty_model_is_sent_as_the_providers_lightest_default() {
+        let mut config = built_in_config();
+        config.default_provider = Some("anthropic".into());
+        let h = harness(config);
+        h.orch
+            .save_api_key("anthropic", Secret::new("a-key"))
+            .await
+            .unwrap();
+        h.orch.open();
+        let session = h.orch.submit("hi").unwrap();
+        let _ = session;
+        let tx = h.feed();
+        drop(tx);
+        // The request is built from the effective model.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let requests = h.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].model, "claude-haiku-5-5");
     }
 }

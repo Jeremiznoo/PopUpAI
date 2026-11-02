@@ -12,6 +12,7 @@ workspace = true
 popupai-ai = { path = "../popupai-ai" }
 popupai-security = { path = "../popupai-security" }
 futures-util.workspace = true
+pulldown-cmark.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time"] }

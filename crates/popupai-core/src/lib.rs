@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod credentials;
+pub mod markdown;
 pub mod orchestrator;
 pub mod request_error;
 pub mod session;
