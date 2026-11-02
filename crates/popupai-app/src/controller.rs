@@ -28,6 +28,7 @@ pub mod qobject {
         #[qproperty(QString, notice)]
         #[qproperty(bool, background_answer, cxx_name = "backgroundAnswer")]
         #[qproperty(bool, needs_key, cxx_name = "needsKey")]
+        #[qproperty(bool, can_configure_shortcut, cxx_name = "canConfigureShortcut")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
         type PopupController = super::PopupControllerRust;
@@ -50,6 +51,11 @@ pub mod qobject {
         /// Bring back an answer that finished in the background.
         #[qinvokable]
         fn resume(self: Pin<&mut PopupController>);
+
+        /// Open the desktop's own shortcut settings, to assign the global shortcut.
+        #[qinvokable]
+        #[cxx_name = "configureShortcut"]
+        fn configure_shortcut(self: Pin<&mut PopupController>);
 
         /// Switch to the next provider in the list.
         #[qinvokable]
@@ -107,6 +113,7 @@ pub struct PopupControllerRust {
     shortcut_notice: String,
     background_answer: bool,
     needs_key: bool,
+    can_configure_shortcut: bool,
     start_visible: bool,
     exit_on_dismiss: bool,
     model: ViewModel,
@@ -177,11 +184,16 @@ impl Initialize for qobject::PopupController {
                         ShortcutStatus::Unavailable { reason } => {
                             tracing::warn!(%reason, "global shortcut unavailable");
                         }
+                        ShortcutStatus::ConfigureFailed { reason } => {
+                            tracing::warn!(%reason, "shortcut settings could not be opened");
+                        }
                     }
                     let text = shortcut_notice::notice(&status);
+                    let configurable = shortcut_notice::offers_configuration(&status);
                     if qt_thread
                         .queue(move |mut controller| {
                             controller.as_mut().rust_mut().get_mut().shortcut_notice = text;
+                            controller.as_mut().set_can_configure_shortcut(configurable);
                             controller.refresh_notice();
                         })
                         .is_err()
@@ -288,6 +300,13 @@ impl qobject::PopupController {
             let _ =
                 qt_thread.queue(move |mut controller| controller.as_mut().set_needs_key(needs_key));
         });
+    }
+
+    fn configure_shortcut(self: Pin<&mut Self>) {
+        if let Some(configure) = context::get().and_then(|app| app.shortcut_configure.as_ref()) {
+            tracing::info!("opening the desktop shortcut settings");
+            let _ = configure.send(());
+        }
     }
 
     fn cycle_provider(mut self: Pin<&mut Self>) {

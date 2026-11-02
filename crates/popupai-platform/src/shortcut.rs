@@ -13,7 +13,7 @@ use ashpd::desktop::global_shortcuts::{GlobalShortcuts, NewShortcut, Shortcut};
 use ashpd::{AppID, Error, PortalError, register_host_app_with_connection};
 use futures_util::StreamExt;
 use popupai_core::shortcut::{Chord, Key, NamedKey};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 use crate::ipc::{Bus, Command, connect};
@@ -38,6 +38,8 @@ pub enum ShortcutStatus {
     },
     /// The portal knows the shortcut but no key is assigned to it.
     Unassigned,
+    /// Opening the system's shortcut settings failed (see [`spawn`]).
+    ConfigureFailed { reason: String },
     /// The shortcut could not be set up, or stopped working. The text is meant to be
     /// shown to the user.
     Unavailable { reason: String },
@@ -160,8 +162,11 @@ fn no_global_shortcuts() -> String {
 }
 
 /// Start the shortcut task. It reports through `status` and sends
-/// [`Command::Toggle`] on `commands` each time the shortcut fires. It ends when the
-/// command channel closes or when the shortcut stops working (after reporting it).
+/// [`Command::Toggle`] on `commands` each time the shortcut fires. A message on
+/// `configure` asks the desktop to show its shortcut settings, where the user can assign
+/// or change the key (the desktop may leave a requested key unassigned until the user
+/// confirms it). The task ends when the command channel closes or when the shortcut stops
+/// working (after reporting it).
 ///
 /// Must be called from inside a Tokio runtime.
 pub fn spawn(
@@ -169,13 +174,15 @@ pub fn spawn(
     settings: Settings,
     commands: UnboundedSender<Command>,
     status: UnboundedSender<ShortcutStatus>,
+    configure: UnboundedReceiver<()>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         // The portal client runs in its own task so that a panic inside it (the
         // library asserts on a malformed reply) is reported instead of lost.
         let inner = tokio::spawn({
             let status = status.clone();
-            async move { run(&bus, &settings, &commands, &status).await }
+            let mut configure = configure;
+            async move { run(&bus, &settings, &commands, &status, &mut configure).await }
         });
         let reason = match inner.await {
             Ok(Ok(())) => return,
@@ -191,6 +198,7 @@ async fn run(
     settings: &Settings,
     commands: &UnboundedSender<Command>,
     status: &UnboundedSender<ShortcutStatus>,
+    configure: &mut UnboundedReceiver<()>,
 ) -> Result<(), String> {
     let connection = connect(bus)
         .await
@@ -277,6 +285,17 @@ async fn run(
                 let event = event.ok_or_else(lost)?;
                 if let Some(shortcut) = event.shortcuts().iter().find(|s| s.id() == SHORTCUT_ID)
                     && status.send(status_of(shortcut, registration.clone())).is_err()
+                {
+                    return Ok(());
+                }
+            }
+            Some(()) = configure.recv() => {
+                if let Err(err) = portal
+                    .configure_shortcuts(&session, None, Default::default())
+                    .await
+                    && status
+                        .send(ShortcutStatus::ConfigureFailed { reason: explain(&err) })
+                        .is_err()
                 {
                     return Ok(());
                 }

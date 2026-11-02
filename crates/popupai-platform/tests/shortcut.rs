@@ -13,7 +13,7 @@ use popupai_platform::shortcut::{SHORTCUT_ID, Settings, ShortcutStatus, spawn};
 use popupai_platform::{Bus, Command};
 use support::PrivateBus;
 use support::portal::{Bind, MockPortal, Options};
-use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::timeout;
 
 const APP_ID: &str = "io.github.jeremiznoo.PopUpAI";
@@ -22,6 +22,7 @@ struct Run {
     status: UnboundedReceiver<ShortcutStatus>,
     commands: UnboundedReceiver<Command>,
     task: tokio::task::JoinHandle<()>,
+    configure: UnboundedSender<()>,
 }
 
 fn settings() -> Settings {
@@ -34,16 +35,19 @@ fn settings() -> Settings {
 fn start_client(bus: &PrivateBus) -> Run {
     let (command_tx, commands) = unbounded_channel();
     let (status_tx, status) = unbounded_channel();
+    let (configure, configure_rx) = unbounded_channel();
     let task = spawn(
         Bus::Address(bus.address.clone()),
         settings(),
         command_tx,
         status_tx,
+        configure_rx,
     );
     Run {
         status,
         commands,
         task,
+        configure,
     }
 }
 
@@ -118,6 +122,46 @@ async fn a_trigger_changed_in_the_system_settings_is_reported() {
 
     portal.change_trigger(SHORTCUT_ID, "").await;
     assert_eq!(next_status(&mut run).await, ShortcutStatus::Unassigned);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn asking_to_configure_opens_the_desktops_shortcut_settings() {
+    let bus = PrivateBus::start();
+    let portal = MockPortal::start(
+        &bus.address,
+        Options {
+            bind: Bind::NoTrigger,
+            ..Options::default()
+        },
+    )
+    .await;
+    let mut run = start_client(&bus);
+    assert_eq!(next_status(&mut run).await, ShortcutStatus::Unassigned);
+    assert_eq!(portal.configure_calls(), 0);
+
+    run.configure.send(()).unwrap();
+    for _ in 0..100 {
+        if portal.configure_calls() == 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(portal.configure_calls(), 1);
+
+    // The user assigns a key in that window; the desktop tells the client.
+    portal.change_trigger(SHORTCUT_ID, "Ctrl+Shift+Space").await;
+    assert_eq!(
+        next_status(&mut run).await,
+        ShortcutStatus::Active {
+            trigger: "Ctrl+Shift+Space".to_owned(),
+            registration: None,
+        }
+    );
+    portal.activate(SHORTCUT_ID).await;
+    let command = timeout(Duration::from_secs(5), run.commands.recv())
+        .await
+        .expect("the newly assigned key toggles the popup");
+    assert_eq!(command, Some(Command::Toggle));
 }
 
 #[tokio::test(flavor = "multi_thread")]

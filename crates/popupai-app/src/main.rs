@@ -161,6 +161,8 @@ fn main() -> ExitCode {
     let shortcut_chord = config.shortcut();
     // Keeps the tray icon for as long as the application runs.
     let mut tray = None;
+    let (configure_tx, configure_rx) = unbounded_channel();
+    let mut shortcut_configure = None;
     let (commands, shortcut) = match commands {
         Some(mut remote) => {
             let (merged, merged_rx) = unbounded_channel();
@@ -199,7 +201,9 @@ fn main() -> ExitCode {
                             },
                             merged,
                             status_tx,
+                            configure_rx,
                         );
+                        shortcut_configure = Some(configure_tx);
                         Some(status_rx)
                     }
                     Err(err) => {
@@ -240,6 +244,7 @@ fn main() -> ExitCode {
         events,
         commands,
         shortcut,
+        shortcut_configure,
     }));
 
     let _tray = tray;

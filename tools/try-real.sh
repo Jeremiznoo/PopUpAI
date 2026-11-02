@@ -9,7 +9,8 @@
 # It starts PopUpAI hidden, as autostart would, with a temporary configuration that uses
 # only the local Ollama server (so the secret store is not touched) and a private
 # XDG_CONFIG_HOME (so no autostart entry is read or written). Then it waits, printing
-# nothing, while you press the shortcut, type a question, press Enter, and click elsewhere
+# nothing, after showing the popup once by itself. You then use it: set the shortcut if the
+# popup says it has no key, press the shortcut, type a question, press Enter, and click elsewhere
 # to close it. Afterwards it prints the application's own metadata-only log: what the portal
 # said about the shortcut, whether the tray icon was shown, and each opening, request and
 # dismissal. Prompts and answers are never in that log.
@@ -54,6 +55,10 @@ for _ in $(seq 1 200); do
     grep -qE "global shortcut (active|unavailable|has no key)" "$log" && break
     sleep 0.1
 done
+# Show the popup once by command (over D-Bus, like `popupai --toggle`), so it can be used
+# even while the global shortcut has no key yet.
+sleep 1
+"$bin" --toggle >/dev/null 2>&1 || true
 sleep "$window"
 
 echo

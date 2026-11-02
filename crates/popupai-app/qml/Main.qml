@@ -202,6 +202,13 @@ Window {
                 color: "#bf616a"
             }
 
+            TextButton {
+                visible: controller.canConfigureShortcut
+                text: "Set the shortcut\u2026"
+                font.pixelSize: 12
+                onClicked: controller.configureShortcut()
+            }
+
             Text {
                 visible: controller.question.length > 0
                 width: parent.width

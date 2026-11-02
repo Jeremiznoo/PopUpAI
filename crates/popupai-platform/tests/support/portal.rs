@@ -58,6 +58,7 @@ struct State {
     /// Shortcut id and preferred trigger, for each shortcut asked for.
     bound: Mutex<Vec<(String, Option<String>)>>,
     session: Mutex<Option<String>>,
+    configure_calls: Mutex<usize>,
 }
 
 #[derive(Serialize, Type)]
@@ -187,6 +188,15 @@ impl Shortcuts {
         Ok(OwnedObjectPath::try_from(request).expect("a valid path"))
     }
 
+    fn configure_shortcuts(
+        &self,
+        _session_handle: OwnedObjectPath,
+        _parent_window: String,
+        _options: HashMap<String, OwnedValue>,
+    ) {
+        *self.state.configure_calls.lock().unwrap() += 1;
+    }
+
     async fn bind_shortcuts(
         &self,
         _session_handle: OwnedObjectPath,
@@ -272,6 +282,11 @@ impl MockPortal {
         }
         let connection = builder.build().await.expect("start the mock portal");
         Self { connection, state }
+    }
+
+    /// How many times the client asked to show the shortcut settings.
+    pub fn configure_calls(&self) -> usize {
+        *self.state.configure_calls.lock().unwrap()
     }
 
     pub fn registered_app_ids(&self) -> Vec<String> {

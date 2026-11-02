@@ -2,6 +2,11 @@
 
 use popupai_platform::shortcut::ShortcutStatus;
 
+/// Whether the popup should offer a button that opens the desktop's shortcut settings.
+pub fn offers_configuration(status: &ShortcutStatus) -> bool {
+    matches!(status, ShortcutStatus::Unassigned)
+}
+
 const MANUAL_ROUTE: &str =
     "Bind the command `popupai --toggle` in your system keyboard settings to open the popup.";
 
@@ -11,6 +16,9 @@ pub fn notice(status: &ShortcutStatus) -> String {
         ShortcutStatus::Active { .. } => String::new(),
         ShortcutStatus::Unassigned => format!(
             "The global shortcut has no key assigned. Set one in the system shortcut settings. {MANUAL_ROUTE}"
+        ),
+        ShortcutStatus::ConfigureFailed { reason } => format!(
+            "The shortcut settings could not be opened: {reason}. Open the system shortcut settings yourself."
         ),
         ShortcutStatus::Unavailable { reason } => {
             format!("The global shortcut is unavailable: {reason}. {MANUAL_ROUTE}")
@@ -38,6 +46,26 @@ mod tests {
         });
         assert!(text.contains("no desktop portal is running"), "{text}");
         assert!(text.contains("popupai --toggle"), "{text}");
+    }
+
+    #[test]
+    fn only_an_unassigned_shortcut_offers_the_settings_button() {
+        assert!(offers_configuration(&ShortcutStatus::Unassigned));
+        assert!(!offers_configuration(&ShortcutStatus::Active {
+            trigger: "x".into(),
+            registration: None
+        }));
+        assert!(!offers_configuration(&ShortcutStatus::Unavailable {
+            reason: "x".into()
+        }));
+    }
+
+    #[test]
+    fn a_failure_to_open_the_settings_is_explained() {
+        let text = notice(&ShortcutStatus::ConfigureFailed {
+            reason: "requires version 2".into(),
+        });
+        assert!(text.contains("requires version 2"), "{text}");
     }
 
     #[test]

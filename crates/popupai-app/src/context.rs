@@ -10,7 +10,7 @@ use popupai_core::orchestrator::{Event, Orchestrator};
 use popupai_platform::Command;
 use popupai_platform::shortcut::ShortcutStatus;
 use tokio::runtime::Handle;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 /// Everything `main` hands over when it builds the context.
 pub struct Parts {
@@ -34,6 +34,8 @@ pub struct Parts {
     pub commands: Option<UnboundedReceiver<Command>>,
     /// What the portal says about the global shortcut, when one was requested.
     pub shortcut: Option<UnboundedReceiver<ShortcutStatus>>,
+    /// Asks the shortcut task to open the desktop's shortcut settings.
+    pub shortcut_configure: Option<UnboundedSender<()>>,
 }
 
 pub struct AppContext {
@@ -43,6 +45,7 @@ pub struct AppContext {
     pub config_path: Option<PathBuf>,
     pub start_visible: bool,
     pub exit_on_dismiss: bool,
+    pub shortcut_configure: Option<UnboundedSender<()>>,
     events: Mutex<Option<UnboundedReceiver<Event>>>,
     commands: Mutex<Option<UnboundedReceiver<Command>>>,
     shortcut: Mutex<Option<UnboundedReceiver<ShortcutStatus>>>,
@@ -57,6 +60,7 @@ impl AppContext {
             config_path: parts.config_path,
             start_visible: parts.start_visible,
             exit_on_dismiss: parts.exit_on_dismiss,
+            shortcut_configure: parts.shortcut_configure,
             events: Mutex::new(Some(parts.events)),
             commands: Mutex::new(parts.commands),
             shortcut: Mutex::new(parts.shortcut),
