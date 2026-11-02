@@ -2,6 +2,7 @@
 # Guided on-screen test of the resident popup. Development tool.
 #
 #   tools/try-resident.sh [cycles]      (default: 5 automatic show/hide cycles)
+#   COUNTDOWN=30 tools/try-resident.sh  (seconds before the first show; default 5)
 #
 # It starts PopUpAI hidden, as autostart would, against a fake Ollama server and a
 # temporary configuration. After a countdown it shows and hides the popup by itself
@@ -81,8 +82,8 @@ itself $cycles times (about 4 seconds per cycle), then stay up for 25 seconds.
 Nothing will be printed until it is all over. The results appear at the end.
 
 EOF
-for n in 5 4 3 2 1; do
-    printf 'Starting in %s...\r' "$n"
+for n in $(seq "${COUNTDOWN:-5}" -1 1); do
+    printf 'Starting in %s...  \r' "$n"
     sleep 1
 done
 echo "Running... (silent until the end)"

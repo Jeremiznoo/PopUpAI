@@ -76,16 +76,21 @@ Disk use after the first build: about 1.4 GB in `target/` (git-ignored) and abou
   `ld.bfd`, but a build with a real QML module may need `lld` or `mold`. Install
   `lld` if the first QML build fails to link.
 
-- **Unexplained loss of focus.** The popup closes when it loses keyboard focus. In an
-  automatic run (`tools/try-resident.sh`, nobody supposed to touch anything) 3 of 6
-  dismissals were `focus lost`, and one spike run had lost focus 250 ms after showing,
-  while two other runs stayed active. The cause is unknown. The leading hypothesis is
-  that terminal output in the application hosting the test makes it take the focus;
-  `tools/try-resident.sh` now prints nothing during the cycles and keeps its log in
-  `target/try-resident.log` so this can be tested. Until it is explained, the claim
-  that the popup reliably keeps focus is not made.
-- **Cold first show.** The first show after start took 158 ms to become active, above
-  the 150 ms target; later shows took under 10 ms. Pre-creating the window
+- **Loss of focus: the popup always gets focus, but keeping it is not established.**
+  The popup closes when it loses keyboard focus. Across the on-screen runs it became
+  active after every show (12 of 12, in 4 to 9 ms, apart from the first show after
+  start). Keeping the focus is less clear. In the second silent run of
+  `tools/try-resident.sh` (nothing printed to the terminal), 3 of 6 shows ended by
+  `escape`, a key the script never sends, so someone did press keys while it ran and
+  the run was not hands-off. That makes the focus losses at 1.4 s and 3.3 s ambiguous
+  (they may be the user's clicks). One case cannot be human: **show 2 became active and
+  was inactive again 38 ms later.** A spike run had also lost focus 250 ms after showing.
+  The cause of those two early losses is unknown; the terminal-output hypothesis was
+  not confirmed (the loss happened with the terminal silent). An unattended run, with
+  nobody touching the machine, is the decisive test. Until then no claim is made that
+  the popup reliably keeps focus.
+- **Cold first show.** The first show after start took 158 ms, then 114 ms, to become active, above
+  the 150 ms target on one of the two; later shows took under 10 ms. Pre-creating the window
   surface at start-up is the obvious remedy, not done yet.
 
 ### Not verified
