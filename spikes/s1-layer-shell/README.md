@@ -52,15 +52,16 @@ shell tool, no keyboard or mouse input intended):
 
 What this shows, and what it does not:
 
-- **S2, promising but not closed.** The window became active 56 ms after being
-  shown with no click, so KWin grants keyboard focus to an on-demand layer surface
-  when it is mapped. No key was typed during the run, so delivery of typed keys is
-  not confirmed yet.
+- **S2, confirmed.** The window became active 56, 46 and 55 ms after being shown
+  with no click, so KWin grants keyboard focus to an on-demand layer surface when
+  it is mapped. In run 3, 36 typed keys reached the input field with no mouse press
+  inside the window (run 3 below).
 - **S3, not established.** The window lost focus 250 ms later. No pointer event
   reached the window and no key was typed. Run 2 below did not repeat it, so it is
   not systematic. The cause of run 1's loss is unidentified (an external event is
-  the likeliest explanation, but that is not demonstrated). A deliberate click on
-  another window has not been tested yet.
+  the likeliest explanation, but that is not demonstrated). In run 3 the window was
+  deactivated at the moment of the outside click the user was asked to make. That
+  the click also reached the target window is not confirmed yet.
 - **S1, not confirmed.** The placement has to be confirmed by eye; Qt reports the
   whole screen as available and cannot see the panel.
 - **Local latency is promising:** about 34 ms from show to first frame, and 56 ms
@@ -81,3 +82,23 @@ launch context, nothing touched during the run):
 
 The window became active again with no click and stayed active for the whole run:
 no deactivation, size 480x200 as requested, on output `eDP-1`.
+
+**Run 3** (default options, `--seconds 30`, interactive: the user typed, then
+clicked once on another window):
+
+```
+[   123 ms] active=1
+[   123 ms] became active 55 ms after being shown, without any click
+[  9036 ms] first key reached the input field
+[ 23606 ms] focus object: none
+[ 23606 ms] active=0
+[ 23607 ms] SUMMARY reason="focus lost ..." shown_to_active_ms=55 keys=36 first_key_ms=9036 ever_active=1
+```
+
+- No `mouse press` and no `pointer entered` line was logged, so the 36 keys were
+  delivered to a window the pointer never touched: no click was needed (S2).
+- The window stayed active while typing (about 14 s) and became inactive at
+  23.6 s, which matches the outside click (S3). That is an inference from timing and
+  the user's instructions, not an observation of the click itself.
+- Still unknown: whether that click was also delivered to the window underneath, and
+  where the window appeared on screen. Only the user can tell.
