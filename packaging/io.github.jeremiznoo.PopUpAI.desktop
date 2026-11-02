@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=PopUpAI
+GenericName=Quick AI question
+Comment=Ask an AI model a quick question from a small popup
+Exec=popupai
+Icon=dialog-question
+Terminal=false
+Categories=Utility;
+Keywords=AI;assistant;ask;question;chat;
+StartupNotify=false
+Actions=Toggle;
+
+[Desktop Action Toggle]
+Name=Show or hide the popup
+Exec=popupai --toggle

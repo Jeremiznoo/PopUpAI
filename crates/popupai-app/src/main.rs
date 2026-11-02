@@ -13,7 +13,7 @@ use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 use popupai_core::config::{Config, LogLevel};
 use popupai_core::orchestrator::{DefaultProviderFactory, Orchestrator};
 use popupai_platform::shortcut::{Settings as ShortcutSettings, spawn as spawn_shortcut};
-use popupai_platform::{BUS_NAME, Bus, Claim, Command, SecretServiceStore};
+use popupai_platform::{Autostart, BUS_NAME, Bus, Claim, Command, SecretServiceStore};
 use tokio::sync::mpsc::unbounded_channel;
 
 use cli::Action;
@@ -33,6 +33,25 @@ fn init_logging(level: LogLevel) {
         .with_target(false)
         .with_writer(std::io::stderr)
         .init();
+}
+
+/// Make the autostart entry match the `launch_at_startup` setting.
+fn sync_autostart(wanted: bool) {
+    let Some(autostart) = Autostart::user() else {
+        return;
+    };
+    if autostart.is_enabled() == wanted {
+        return;
+    }
+    let result = if wanted {
+        std::env::current_exe().and_then(|exe| autostart.enable(&exe))
+    } else {
+        autostart.disable()
+    };
+    match result {
+        Ok(()) => tracing::info!(enabled = wanted, "autostart entry updated"),
+        Err(err) => tracing::warn!("could not update the autostart entry: {err}"),
+    }
 }
 
 fn main() -> ExitCode {
@@ -123,6 +142,12 @@ fn main() -> ExitCode {
     }
     if !notice.is_empty() {
         tracing::warn!("{notice}");
+    }
+
+    // Start with the session when the settings say so. Only done when the settings
+    // were read successfully, so a broken file never removes the entry by accident.
+    if notice.is_empty() && has_instance {
+        sync_autostart(config.general.launch_at_startup);
     }
 
     // API keys live in the system secret store (Secret Service: KDE Wallet, GNOME

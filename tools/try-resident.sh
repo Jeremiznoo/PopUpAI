@@ -37,7 +37,7 @@ trap cleanup EXIT INT TERM
 
 echo "Building..."
 cargo build -p popupai-app >/dev/null 2>&1 || { echo "build failed: run 'cargo build -p popupai-app'"; exit 1; }
-bin=target/debug/popupai-app
+bin=target/debug/popupai
 
 port="$(python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 python3 -I tools/fake_ollama.py --port "$port" >"$tmp/fake.log" 2>&1 &
@@ -63,7 +63,7 @@ call() { # call Show|Hide
         /io/github/jeremiznoo/PopUpAI "io.github.jeremiznoo.PopUpAI.$1"
 }
 
-POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 \
+POPUPAI_NO_SHORTCUT=1 XDG_CONFIG_HOME="$tmp/xdg" POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 \
     "$bin" --background >"$tmp/app.log" 2>&1 &
 app=$!
 for _ in $(seq 1 60); do

@@ -56,8 +56,8 @@ for n in 5 4 3 2 1; do
 done
 echo
 
-POPUPAI_CONFIG="$tmp/config.toml" POPUPAI_EXIT_ON_DISMISS=1 QT_QPA_PLATFORM=wayland \
-    QT_FORCE_STDERR_LOGGING=1 timeout 120 target/debug/popupai-app 2>&1 | grep -vE 'sfinae|range_access' || true
+POPUPAI_NO_SHORTCUT=1 XDG_CONFIG_HOME="$tmp/xdg" POPUPAI_CONFIG="$tmp/config.toml" POPUPAI_EXIT_ON_DISMISS=1 QT_QPA_PLATFORM=wayland \
+    QT_FORCE_STDERR_LOGGING=1 timeout 120 target/debug/popupai 2>&1 | grep -vE 'sfinae|range_access' || true
 
 echo
 echo "--- requests the fake server saw (method and path only, never any content):"

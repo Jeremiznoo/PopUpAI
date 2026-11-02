@@ -45,7 +45,7 @@ exactly() { [ "$(count "$1")" -eq "$2" ]; }
 
 echo "Building..."
 cargo build -p popupai-app >/dev/null 2>&1 || { echo "build failed"; exit 1; }
-bin=target/debug/popupai-app
+bin=target/debug/popupai
 
 # A bus with no service directories: the stock session configuration would let it start
 # whatever is installed on the machine (the real desktop portal, for one).
@@ -68,7 +68,8 @@ bus_pid=$!
 for _ in $(seq 1 50); do [ -s "$tmp/addr" ] && break; sleep 0.1; done
 export DBUS_SESSION_BUS_ADDRESS="$(head -1 "$tmp/addr")"
 # No configuration file: the first-run providers (one per vendor) are used.
-export POPUPAI_CONFIG="$tmp/config.toml" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1
+# XDG_CONFIG_HOME is private too, so the autostart entry of the real account is never read or changed.
+export POPUPAI_CONFIG="$tmp/config.toml" XDG_CONFIG_HOME="$tmp/xdg" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1
 
 echo "Private bus: $DBUS_SESSION_BUS_ADDRESS"
 echo "1. start hidden, as autostart would"
@@ -107,7 +108,7 @@ shown="$(count "popup opened")"
 timeout 10 "$bin"
 sleep 0.5
 check "a plain launch on a visible popup changes nothing" exactly "popup opened" "$shown"
-check "only one process is running" test "$(pgrep -c -x popupai-app)" -eq 1
+check "only one process is running" test "$(pgrep -c -x popupai)" -eq 1
 
 echo "5. --quit stops the running instance"
 timeout 10 "$bin" --quit
