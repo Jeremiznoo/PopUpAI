@@ -3,7 +3,7 @@
 # shortcut through the desktop portal, the tray icon, the popup, and a real answer from the
 # local Ollama server. Development tool.
 #
-#   tools/try-real.sh               (90 seconds for you to use it)
+#   tools/try-real.sh               (90 seconds for you to use it; click the tray icon to open)
 #   WINDOW=180 tools/try-real.sh
 #
 # It starts PopUpAI hidden, as autostart would, with a temporary configuration that uses
@@ -55,10 +55,17 @@ for _ in $(seq 1 200); do
     grep -qE "global shortcut (active|unavailable|has no key)" "$log" && break
     sleep 0.1
 done
-# Show the popup once by command (over D-Bus, like `popupai --toggle`), so it can be used
-# even while the global shortcut has no key yet.
-sleep 1
-"$bin" --toggle >/dev/null 2>&1 || true
+# By default the popup is NOT shown by the script: the user opens it by clicking the tray
+# icon (which also tests the icon), or with the shortcut once it has a key. A popup opened
+# by the script right after the user's last action elsewhere was seen to lose the keyboard
+# focus within about a second, because the window the user had just used took it back.
+# AUTO_SHOW=1 restores the automatic opening for runs where nobody is at the keyboard.
+if [ "${AUTO_SHOW:-0}" = "1" ]; then
+    sleep 1
+    "$bin" --toggle >/dev/null 2>&1 || true
+else
+    notify-send -a PopUpAI "PopUpAI test started" "Click the PopUpAI icon in the notification area to open the popup." 2>/dev/null || true
+fi
 sleep "$window"
 
 echo
