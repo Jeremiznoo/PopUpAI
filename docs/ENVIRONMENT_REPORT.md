@@ -7,10 +7,12 @@ read from the live system; nothing is inferred unless marked **(assumption)**.
 
 The desktop is a good fit for the product's primary target: KDE Plasma 6.8 on
 Wayland, with the XDG GlobalShortcuts portal, `wlr-layer-shell`, a Secret
-Service and a StatusNotifier host all present. The development toolchain is
-**not** installed on the host (no Rust, no C++ compiler, no Qt development
-files). By decision of the project owner the host stays untouched: builds and
-tests run in a Docker container, see [DEVELOPMENT.md](DEVELOPMENT.md).
+Service and a StatusNotifier host all present. At audit time the development toolchain was
+**not** installed (no Rust, no C++ compiler, no Qt development files). The owner
+first kept the host untouched and built in a container, then decided on
+2026-11-02 to develop on the host and installed the toolchain. The tables below
+are the **audit-time snapshot**; the current setup is in
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Operating system and desktop
 

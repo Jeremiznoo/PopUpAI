@@ -13,8 +13,8 @@ All notable changes are documented here. The format follows
 - ADR 0001 (technology stack), ADR 0002 (Linux desktop integration),
   ADR 0003 (session and cancellation policy), all in *Proposed* status.
 - README, SECURITY and CONTRIBUTING documents.
-- Containerised development environment on a dedicated Exegol container
-  (`scripts/dev.sh`, `rust-toolchain.toml`): nothing is installed on the host.
+- Optional Exegol container workflow (`scripts/dev.sh`) and a pinned
+  `rust-toolchain.toml`. Development later moved to the host; see Changed.
 - Cargo workspace and `popupai-core` with the session state machine from
   ADR 0003, covered by 15 unit tests.
 - `popupai-security`: `Secret` (redacted, zeroized), `Endpoint` validation (https
@@ -34,3 +34,12 @@ All notable changes are documented here. The format follows
   and logs that carry only metadata. Verified by a test that captures all logs.
 - `ProviderError::Unreachable` for refused connections, and `Debug` output of
   session messages that shows sizes instead of text.
+
+### Changed
+
+- Development moved from a container to the Fedora host, because the desktop
+  integration (popup, shortcut portal, tray, Secret Service, performance) can only
+  be validated in the real session. The build dependencies are installed with the
+  command in `docs/DEVELOPMENT.md`; the container is kept as an optional legacy
+  workflow. All 131 tests pass natively, and a Qt Quick plus LayerShellQt program
+  and a minimal cxx-qt crate build against Qt 6.11.2.

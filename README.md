@@ -49,12 +49,12 @@ default. See [SECURITY.md](SECURITY.md) and the threat table in
 
 ## Development
 
-Builds and tests run in a dedicated Exegol container (`exegol-dev`); nothing is
-installed on the host:
+Development is native on Fedora 44 (KDE Plasma, Wayland). Install the build
+dependencies once (the command and what it installs are in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)), then:
 
 ```bash
-scripts/dev.sh setup
-scripts/dev.sh cargo test --workspace
+cargo test --workspace
 ```
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
