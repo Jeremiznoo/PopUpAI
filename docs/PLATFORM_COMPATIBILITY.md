@@ -12,7 +12,7 @@ exercised · ⬜ planned, not started · ❌ not supported.
 |---|---|---|---|---|---|
 | Global shortcut | 🟡 portal v2 present (KDE backend) | ⬜ | ⬜ portal exists on GNOME 48+ **(assumption)** | ⬜ | ⬜ |
 | Corner placement | ✅ bottom-right corner, readable; confirmed by eye by the user with the spike and with the real popup (reported, not measured; one monitor) | ⬜ via `xcb`; dev machine can only test through XWayland | ❌ Mutter is not known to implement layer-shell **(assumption)** | ⬜ | ⬜ |
-| Initial keyboard focus | ✅ three runs: active 46 to 56 ms after show with no click; 36 typed keys delivered with no mouse press (one monitor, `OnDemand`) | ⬜ | ⬜ | ⬜ | ⬜ |
+| Initial keyboard focus | ✅ three runs: active 46 to 56 ms after show with no click; 36 typed keys delivered with no mouse press (one monitor, `OnDemand`); the real resident popup also became active after 18 of 18 shows, re-shows of a recreated surface included, and an unattended run showed no spontaneous focus loss over 6 shows | ⬜ | ⬜ | ⬜ | ⬜ |
 | Outside-click dismissal | ✅ the window was deactivated by the user's outside click (run 3, logged), and the user confirmed that single click also worked in the window underneath (reported, not measured by the program) | ⬜ | ⬜ | ⬜ | ⬜ |
 | System tray | 🟡 StatusNotifierWatcher present | ⬜ | ⬜ needs an extension **(assumption)** | ⬜ | ⬜ |
 | Secret storage | 🟡 `ksecretd` serves `org.freedesktop.secrets` | ⬜ | ⬜ | ⬜ Credential Manager | ⬜ Keychain |

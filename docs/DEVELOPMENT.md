@@ -76,21 +76,19 @@ Disk use after the first build: about 1.4 GB in `target/` (git-ignored) and abou
   `ld.bfd`, but a build with a real QML module may need `lld` or `mold`. Install
   `lld` if the first QML build fails to link.
 
-- **Loss of focus: the popup always gets focus, but keeping it is not established.**
-  The popup closes when it loses keyboard focus. Across the on-screen runs it became
-  active after every show (12 of 12, in 4 to 9 ms, apart from the first show after
-  start). Keeping the focus is less clear. In the second silent run of
-  `tools/try-resident.sh` (nothing printed to the terminal), 3 of 6 shows ended by
-  `escape`, a key the script never sends, so someone did press keys while it ran and
-  the run was not hands-off. That makes the focus losses at 1.4 s and 3.3 s ambiguous
-  (they may be the user's clicks). One case cannot be human: **show 2 became active and
-  was inactive again 38 ms later.** A spike run had also lost focus 250 ms after showing.
-  The cause of those two early losses is unknown; the terminal-output hypothesis was
-  not confirmed (the loss happened with the terminal silent). An unattended run, with
-  nobody touching the machine, is the decisive test. Until then no claim is made that
-  the popup reliably keeps focus.
-- **Cold first show.** The first show after start took 158 ms, then 114 ms, to become active, above
-  the 150 ms target on one of the two; later shows took under 10 ms. Pre-creating the window
+- **Focus: reliable on show; early closures explained by input, two cases unexplained.**
+  The popup became active after every show of the resident application (18 of 18 over
+  three runs, re-shows of a recreated surface included). In the first two runs it also
+  closed early, but those runs were not hands-off: 3 of 6 shows ended by `escape`, a key
+  the script never sends, and the user confirmed pressing keys and clicking. An
+  **unattended** run (`UNATTENDED=1`, nobody at the machine) then showed **no spontaneous
+  closure over 6 shows**: shows 1 to 5 each stayed up 2.5 s until the scripted Hide, and
+  the sixth stayed up for the whole wait. Two early losses remain unexplained and have not
+  been reproduced: one 38 ms after activation in the second run (a click at that exact
+  moment cannot be excluded) and one 250 ms after showing in the first spike run. Six
+  unattended shows are a small sample, so this is evidence and not a guarantee.
+- **Cold first show.** The first show after start took 158, 114 and 138 ms to become active over
+  three runs, around or above the 150 ms target; later shows took under 10 ms. Pre-creating the window
   surface at start-up is the obvious remedy, not done yet.
 
 ### Not verified

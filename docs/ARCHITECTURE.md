@@ -159,7 +159,7 @@ time is reported separately.
 
 | Metric | Target | Status | How it will be measured |
 |---|---|---|---|
-| Popup activation, warm | < 150 ms from shortcut event to first frame with focused input | First measurement on 2026-11-02 (6 shows, local application only): command to keyboard-ready median 8 ms, min 4 ms; the first show after start 158 ms (cold), the next five 4 to 9 ms. Command to first frame median 3 ms, first show 72 ms. A second run: median 6 ms, first show 114 ms. These do not include the compositor's own display latency, and the cold first show was above target once and just below it the other time | Monotonic timestamps at shortcut received, `setVisible(true)`, first frame, active, input focus |
+| Popup activation, warm | < 150 ms from shortcut event to first frame with focused input | First measurement on 2026-11-02 (6 shows, local application only): command to keyboard-ready median 8 ms, min 4 ms; the first show after start 158 ms (cold), the next five 4 to 9 ms. Command to first frame median 3 ms, first show 72 ms. Second and third (unattended) runs: median 6 and 8 ms, first show 114 and 138 ms. These do not include the compositor's own display latency, and the cold first show was above target once and just below it the other time | Monotonic timestamps at shortcut received, `setVisible(true)`, first frame, active, input focus |
 | Idle CPU | Close to 0 % | Unmeasured | `/proc/<pid>/stat` over 60 s with the popup hidden |
 | Idle memory | Provisional budget < 100 MB PSS, to be revised after the first baseline | Unmeasured | `/proc/<pid>/smaps_rollup` |
 | Cold start to ready | Provisional < 1 s | Unmeasured | Process start to shortcut registered |
