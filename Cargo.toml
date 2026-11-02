@@ -4,6 +4,7 @@ members = [
     "crates/popupai-core",
     "crates/popupai-security",
     "crates/popupai-ai",
+    "crates/popupai-app",
 ]
 
 [workspace.package]

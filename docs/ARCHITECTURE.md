@@ -19,7 +19,9 @@ recorded in [docs/ADR/](ADR/): [0001 stack](ADR/0001-technology-stack.md),
 | `popupai-core`: API keys bound to their endpoint, user-facing error messages | Implemented | 8 and 5 unit tests |
 | `popupai-core`: request orchestrator (single in-flight request, cancellation, connection reuse, metadata-only logs) | Implemented | 13 unit tests with a scripted provider, plus a log-privacy test in its own binary |
 | Orchestrator with the real adapters | **Not verified** | Tested with a scripted provider; the adapters are tested separately against a local server |
-| `popupai-platform`, `popupai-app`, QML UI | Not started | Needs a Qt 6 build environment and a display decision, see [DEVELOPMENT.md](DEVELOPMENT.md) |
+| `popupai-app`: QML popup, cxx-qt controller, view model, configuration path | Implemented as a first one-shot popup (it opens at start-up and quits when dismissed). It builds, the view model and path logic have 17 unit tests, and it starts and loads its QML with no warnings on a headless platform | **Not yet shown on screen**, so the layout, streaming display, Stop, Copy and keyboard handling are untested |
+| `popupai-platform`: global shortcut, tray, autostart, single instance | Not started | Spikes S4 and S5 touch the user's session and need approval |
+| Secret Service backend | Not started | Testable natively now |
 
 ## Component diagram
 

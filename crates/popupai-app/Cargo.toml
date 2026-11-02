@@ -1,0 +1,28 @@
+[package]
+name = "popupai-app"
+description = "PopUpAI desktop application: the Qt/QML popup connected to the Rust core."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# The cxx-qt bridge expands to unsafe code, so this crate cannot use the
+# workspace-wide `forbid(unsafe_code)`. Unsafe code is only allowed on the bridge
+# module; everything else in this crate is checked by `deny`.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dependencies]
+popupai-core = { path = "../popupai-core" }
+popupai-security = { path = "../popupai-security" }
+cxx = "1"
+cxx-qt = "0.10"
+cxx-qt-lib = { version = "0.10", features = ["qt_gui", "qt_qml"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+cxx-qt-build = "0.10"

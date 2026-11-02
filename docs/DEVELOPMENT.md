@@ -125,13 +125,64 @@ restored from a backup with an older timestamp (for example after a manual
 experiment), cargo may reuse a stale binary. `touch` the file to force a rebuild.
 This happened once during development and was caught by the full test run.
 
+## Running the application
+
+The application is a one-shot popup for now: it opens at start-up and quits when
+dismissed. The global shortcut and tray icon come next.
+
+1. **A configuration with a provider.** There is no settings screen yet, so write
+   one by hand at `~/.config/popupai/config.toml` (or point `POPUPAI_CONFIG` at a
+   file, which is what the tests and examples do). The file never holds API keys:
+   they are rejected. For example, with a local Ollama:
+
+   ```toml
+   default_provider = "ollama"
+
+   [[provider]]
+   id = "ollama"
+   kind = "ollama"
+   model = "llama3.2:latest"   # any model you have pulled
+   ```
+
+2. **Try the interface without a model.** `tools/fake_ollama.py` serves a canned,
+   word-by-word answer on `127.0.0.1:11555` and never logs what you type. Use
+   `endpoint = "http://127.0.0.1:11555"` and `model = "fake-model"`.
+
+3. **Run it.**
+
+   ```bash
+   QT_FORCE_STDERR_LOGGING=1 cargo run -p popupai-app
+   ```
+
+   `QT_FORCE_STDERR_LOGGING=1` matters: inside a systemd user session Qt sends its
+   own logs to the journal, so QML warnings are otherwise invisible. The
+   application's own logs (provider, model, counts, error kind; never prompts,
+   answers or keys) go to stderr at the level set in the configuration.
+
+Things to know while developing:
+
+- **Keys.** The system secret store is not implemented yet, so providers that need
+  a key (OpenAI, Anthropic, Gemini) report that clearly. Keyless local providers
+  such as Ollama work.
+- **cxx-qt and `unsafe`.** The bridge expands to unsafe code and its module accepts
+  no attributes, so `popupai-app` uses `deny(unsafe_code)` with the exception scoped
+  to the single `controller` module. The other crates `forbid` it.
+- **Build noise.** GCC 16 prints `-Wsfinae-incomplete` warnings from Qt's own
+  headers during the C++ build; they are not from this project. `cxx-qt-build` also
+  warns that no `lld`, `mold` or `gold` linker was found. The build links fine with
+  `ld.bfd` so far.
+- **Layer-shell in QML.** The window is configured with the `org.kde.layershell`
+  QML module shipped by the `layer-shell-qt` runtime package, so no C++ shim is
+  needed. `popupai-app` therefore needs that package at run time, and is Plasma
+  specific until the X11 and other-compositor fallbacks of ADR 0002 are written.
+
 ## Running the app on the desktop
 
 Running the app for real touches your session. Each of these is approved
-beforehand, and none has happened yet:
+beforehand. The spike windows have been shown three times with approval; the real
+popup has not been shown yet:
 
-- The first window shown on screen (spike S1: a small layer-shell window in the
-  bottom-right corner).
+- The first window of the real popup (bottom-right corner).
 - A user-level launcher at `~/.local/share/applications/<app-id>.desktop`, which
   the shortcut portal may need to name the app.
 - A global shortcut entry in KDE's shortcut settings, created through the portal

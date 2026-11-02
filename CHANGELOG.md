@@ -35,6 +35,19 @@ All notable changes are documented here. The format follows
 - `ProviderError::Unreachable` for refused connections, and `Debug` output of
   session messages that shows sizes instead of text.
 
+- `popupai-app`: a first one-shot Qt/QML popup connected to the core through a
+  cxx-qt controller. It is placed with the `org.kde.layershell` QML module
+  (bottom-right, overlay layer, keyboard focus on demand), follows the Plasma
+  colour scheme, and shows the answer as plain text on purpose, since model output
+  is untrusted. It starts and loads headless; it has not been shown on screen yet.
+- Spike S1 to S3 (`spikes/s1-layer-shell`) and `tools/fake_ollama.py` to try the
+  interface without a model.
+
+### Fixed
+
+- Keyless local providers such as Ollama now work when the system secret store is
+  unavailable; providers that need a key still fail with a clear explanation.
+
 ### Changed
 
 - Development moved from a container to the Fedora host, because the desktop

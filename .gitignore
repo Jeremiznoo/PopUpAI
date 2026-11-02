@@ -29,3 +29,6 @@ secrets/
 .DS_Store
 .claude/settings.local.json
 *.log
+
+# QML language-server config, generated per machine
+.qmlls.ini
