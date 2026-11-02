@@ -43,8 +43,8 @@ Window {
         input.forceActiveFocus()
     }
 
-    function closePopup() {
-        controller.dismiss()
+    function closePopup(reason) {
+        controller.dismiss(reason)
         visible = false
         if (oneShot)
             Qt.quit()
@@ -69,7 +69,7 @@ Window {
         if (active)
             wasActive = true
         else if (wasActive && visible)
-            closePopup()
+            closePopup("focus lost")
     }
 
     Component.onCompleted: openPopup()
@@ -183,7 +183,7 @@ Window {
                     Keys.onPressed: event => {
                         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
                         if (event.key === Qt.Key_Escape) {
-                            popup.closePopup()
+                            popup.closePopup("escape")
                             event.accepted = true
                         } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
                                    && !(event.modifiers & Qt.ShiftModifier)) {

@@ -32,9 +32,10 @@ pub mod qobject {
         #[qinvokable]
         fn open(self: Pin<&mut PopupController>);
 
-        /// The popup was dismissed.
+        /// The popup was dismissed. `reason` is a short label for the log, such as
+        /// "escape" or "focus lost".
         #[qinvokable]
-        fn dismiss(self: Pin<&mut PopupController>);
+        fn dismiss(self: Pin<&mut PopupController>, reason: &QString);
 
         #[qinvokable]
         fn submit(self: Pin<&mut PopupController>, text: &QString);
@@ -157,10 +158,10 @@ impl qobject::PopupController {
         self.sync();
     }
 
-    fn dismiss(self: Pin<&mut Self>) {
+    fn dismiss(self: Pin<&mut Self>, reason: &QString) {
         if let Some(app) = context::get() {
             app.orchestrator.dismiss();
-            tracing::info!("popup dismissed");
+            tracing::info!(%reason, "popup dismissed");
         }
     }
 
