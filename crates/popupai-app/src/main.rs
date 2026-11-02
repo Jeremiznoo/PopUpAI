@@ -2,6 +2,7 @@ mod cli;
 mod config_path;
 mod context;
 mod controller;
+mod shortcut_notice;
 mod view_model;
 
 use std::process::ExitCode;
@@ -10,8 +11,10 @@ use std::sync::Arc;
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 use popupai_core::config::{Config, LogLevel};
 use popupai_core::orchestrator::{DefaultProviderFactory, Orchestrator};
+use popupai_platform::shortcut::{Settings as ShortcutSettings, spawn as spawn_shortcut};
 use popupai_platform::{BUS_NAME, Bus, Claim, Command};
 use popupai_security::UnavailableStore;
+use tokio::sync::mpsc::unbounded_channel;
 
 use cli::Action;
 
@@ -127,6 +130,48 @@ fn main() -> ExitCode {
     let store = Arc::new(UnavailableStore::new(
         "the system secret store is not implemented yet",
     ));
+    // Commands come from two places: later invocations (D-Bus) and the global
+    // shortcut (the desktop portal). They meet in one channel.
+    let shortcut_chord = config.shortcut();
+    let (commands, shortcut) = match commands {
+        Some(mut remote) => {
+            let (merged, merged_rx) = unbounded_channel();
+            let forward = merged.clone();
+            runtime.spawn(async move {
+                while let Some(command) = remote.recv().await {
+                    if forward.send(command).is_err() {
+                        break;
+                    }
+                }
+            });
+            let shortcut = if std::env::var_os("POPUPAI_NO_SHORTCUT").is_some_and(|v| v == "1") {
+                tracing::info!("global shortcut disabled by POPUPAI_NO_SHORTCUT");
+                None
+            } else {
+                match shortcut_chord {
+                    Ok(chord) => {
+                        let (status_tx, status_rx) = unbounded_channel();
+                        spawn_shortcut(
+                            Bus::Session,
+                            ShortcutSettings {
+                                app_id: BUS_NAME.to_owned(),
+                                chord,
+                            },
+                            merged,
+                            status_tx,
+                        );
+                        Some(status_rx)
+                    }
+                    Err(err) => {
+                        tracing::error!("the configured shortcut is not usable: {err}");
+                        None
+                    }
+                }
+            };
+            (Some(merged_rx), shortcut)
+        }
+        None => (None, None),
+    };
     let (orchestrator, events) =
         match Orchestrator::new(config, store, Arc::new(DefaultProviderFactory)) {
             Ok(pair) => pair,
@@ -145,6 +190,7 @@ fn main() -> ExitCode {
         exit_on_dismiss: std::env::var_os("POPUPAI_EXIT_ON_DISMISS").is_some_and(|v| v == "1"),
         events,
         commands,
+        shortcut,
     }));
 
     let mut app = QGuiApplication::new();

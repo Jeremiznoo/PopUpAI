@@ -7,6 +7,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use popupai_core::orchestrator::{Event, Orchestrator};
 use popupai_platform::Command;
+use popupai_platform::shortcut::ShortcutStatus;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -23,8 +24,11 @@ pub struct Parts {
     /// resident (`POPUPAI_EXIT_ON_DISMISS=1`).
     pub exit_on_dismiss: bool,
     pub events: UnboundedReceiver<Event>,
-    /// Commands from later invocations (`--toggle`, `--quit`), over D-Bus.
+    /// Commands from later invocations (`--toggle`, `--quit`) and from the global
+    /// shortcut.
     pub commands: Option<UnboundedReceiver<Command>>,
+    /// What the portal says about the global shortcut, when one was requested.
+    pub shortcut: Option<UnboundedReceiver<ShortcutStatus>>,
 }
 
 pub struct AppContext {
@@ -35,6 +39,7 @@ pub struct AppContext {
     pub exit_on_dismiss: bool,
     events: Mutex<Option<UnboundedReceiver<Event>>>,
     commands: Mutex<Option<UnboundedReceiver<Command>>>,
+    shortcut: Mutex<Option<UnboundedReceiver<ShortcutStatus>>>,
 }
 
 impl AppContext {
@@ -47,12 +52,21 @@ impl AppContext {
             exit_on_dismiss: parts.exit_on_dismiss,
             events: Mutex::new(Some(parts.events)),
             commands: Mutex::new(parts.commands),
+            shortcut: Mutex::new(parts.shortcut),
         }
     }
 
     /// The event stream can be taken once, by the controller.
     pub fn take_events(&self) -> Option<UnboundedReceiver<Event>> {
         self.events
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    /// The shortcut status stream can be taken once, by the controller.
+    pub fn take_shortcut(&self) -> Option<UnboundedReceiver<ShortcutStatus>> {
+        self.shortcut
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()

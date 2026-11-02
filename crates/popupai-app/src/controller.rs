@@ -69,8 +69,10 @@ use cxx_qt::{CxxQtType, Initialize, Threading};
 use cxx_qt_lib::QString;
 use popupai_core::orchestrator::Event;
 use popupai_platform::Command;
+use popupai_platform::shortcut::ShortcutStatus;
 
 use crate::context;
+use crate::shortcut_notice;
 use crate::view_model::ViewModel;
 
 #[derive(Default)]
@@ -81,6 +83,10 @@ pub struct PopupControllerRust {
     status: QString,
     provider_label: QString,
     notice: QString,
+    /// Why the configuration could not be used, if it could not.
+    config_notice: String,
+    /// What the portal said about the global shortcut.
+    shortcut_notice: String,
     background_answer: bool,
     start_visible: bool,
     exit_on_dismiss: bool,
@@ -101,7 +107,8 @@ impl Initialize for qobject::PopupController {
                 .unwrap_or_default()
                 .as_str(),
         ));
-        self.as_mut().set_notice(QString::from(app.notice.as_str()));
+        self.as_mut().rust_mut().get_mut().config_notice = app.notice.clone();
+        self.as_mut().refresh_notice();
         self.as_mut().set_start_visible(app.start_visible);
         self.as_mut().set_exit_on_dismiss(app.exit_on_dismiss);
         let status = QString::from(self.model_status());
@@ -121,6 +128,42 @@ impl Initialize for qobject::PopupController {
                     tracing::info!(command = %name, "remote command received");
                     if qt_thread
                         .queue(move |controller| controller.command(QString::from(name)))
+                        .is_err()
+                    {
+                        break; // the QObject is gone
+                    }
+                }
+            });
+        }
+
+        // The global shortcut reports whether the portal accepted it.
+        if let Some(mut statuses) = app.take_shortcut() {
+            let qt_thread = self.qt_thread();
+            app.runtime.spawn(async move {
+                while let Some(status) = statuses.recv().await {
+                    match &status {
+                        ShortcutStatus::Active {
+                            trigger,
+                            registration,
+                        } => {
+                            tracing::info!(%trigger, "global shortcut active");
+                            if let Some(note) = registration {
+                                tracing::warn!(%note, "application registration with the portal");
+                            }
+                        }
+                        ShortcutStatus::Unassigned => {
+                            tracing::warn!("global shortcut has no key assigned");
+                        }
+                        ShortcutStatus::Unavailable { reason } => {
+                            tracing::warn!(%reason, "global shortcut unavailable");
+                        }
+                    }
+                    let text = shortcut_notice::notice(&status);
+                    if qt_thread
+                        .queue(move |mut controller| {
+                            controller.as_mut().rust_mut().get_mut().shortcut_notice = text;
+                            controller.refresh_notice();
+                        })
                         .is_err()
                     {
                         break; // the QObject is gone
@@ -150,6 +193,19 @@ impl Initialize for qobject::PopupController {
 impl qobject::PopupController {
     fn model_status(&self) -> &'static str {
         self.rust().model.status.as_str()
+    }
+
+    /// Show the configuration and shortcut problems together.
+    fn refresh_notice(mut self: Pin<&mut Self>) {
+        let text = {
+            let rust = self.rust();
+            [rust.config_notice.as_str(), rust.shortcut_notice.as_str()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        self.as_mut().set_notice(QString::from(text.as_str()));
     }
 
     /// Mirror the view model into the QML properties.
