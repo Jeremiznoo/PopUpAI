@@ -61,8 +61,8 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Known limitations
 
-- Only the session, security and provider logic exist. There is no popup, global
-  shortcut, tray or UI yet.
+- Only the core logic exists (sessions, configuration, security, providers and
+  request orchestration). There is no popup, global shortcut, tray or UI yet.
 - The operating system secret store backend is not written yet.
 - On Wayland, corner placement, initial focus and outside-click dismissal depend
   on compositor support that has been confirmed to be *advertised* on KDE Plasma

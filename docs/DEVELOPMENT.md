@@ -77,13 +77,19 @@ download from `static.rust-lang.org` and crates.io.
 - Container created from the installed image; configuration as in the table above.
 - Rust 1.99.1, cargo, clippy and rustfmt run as uid 1000.
 - Workspace: `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test` pass,
-  91 tests in total: `popupai-core` 15, `popupai-security` 20, `popupai-ai` 39 unit
-  and 17 end-to-end.
+  131 tests in total, stable over repeated runs: `popupai-core` 54 unit and 1
+  log-privacy test, `popupai-security` 20, `popupai-ai` 39 unit and 17 end-to-end.
 - The end-to-end tests talk to a scripted HTTP server on the container's loopback
   interface. They check the headers actually sent (the key is only ever in a
   header, never in the URL or body), error mapping, refusal to follow redirects,
   timeouts, mid-stream failures, and that dropping a stream closes the connection.
-- The redirect test was checked to have teeth: with redirects enabled it fails.
+- Two tests were checked to have teeth by breaking the code on purpose: with
+  redirects enabled the redirect test fails, and with an answer deliberately
+  written to the logs the log-privacy test fails.
+- Logs are checked by capturing everything at TRACE level during a successful
+  request, a failing one whose error text echoes the key, a stopped one and one
+  that cannot start. The captured text must contain none of the prompts,
+  answers, server error text or the key.
 - No file in the project is owned by root.
 
 ### Not verified
@@ -98,6 +104,18 @@ download from `static.rust-lang.org` and crates.io.
   container, which has no Secret Service on a session bus.
 - **Ollama** was installed on the host but not running when the machine was
   audited, so the Ollama adapter has only been tested against the scripted server.
+
+### A logging-test pitfall
+
+`tracing` caches process-wide which log points are enabled. A test that installs a
+subscriber can therefore miss events when other tests run in the same process
+without one: it passed alone and failed in parallel. The log-privacy test lives in
+its own file (`crates/popupai-core/tests/logging.rs`), which Cargo runs as a
+separate process, with a single test function. Keep it that way.
+
+Tests that cancel a request must first wait for it to have started (for example
+by waiting for its first event). Cancelling a task that has not been polled yet
+means no request was ever created, so there is nothing to observe closing.
 
 ### A build-cache pitfall
 

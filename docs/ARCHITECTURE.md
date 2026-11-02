@@ -15,7 +15,10 @@ recorded in [docs/ADR/](ADR/): [0001 stack](ADR/0001-technology-stack.md),
 | `popupai-security`: OS secret store backend (Secret Service / KWallet) | **Not implemented**; only the fail-closed `UnavailableStore` exists | Cannot be exercised from the build container, which has no session bus |
 | `popupai-ai`: OpenAI, OpenAI-compatible, Anthropic, Gemini, Ollama adapters, streaming, cancellation, error taxonomy | Implemented | 39 unit tests and 17 end-to-end tests against a scripted local server |
 | `popupai-ai` against the live services | **Not verified** | Wire formats come from public documentation and offline fixtures; no real request has been made |
-| `popupai-core`: configuration, request orchestration | Not started | |
+| `popupai-core`: configuration (validation, atomic `0600` storage, no keys in the file) | Implemented | 13 unit tests |
+| `popupai-core`: API keys bound to their endpoint, user-facing error messages | Implemented | 8 and 5 unit tests |
+| `popupai-core`: request orchestrator (single in-flight request, cancellation, connection reuse, metadata-only logs) | Implemented | 13 unit tests with a scripted provider, plus a log-privacy test in its own binary |
+| Orchestrator with the real adapters | **Not verified** | Tested with a scripted provider; the adapters are tested separately against a local server |
 | `popupai-platform`, `popupai-app`, QML UI | Not started | Needs a Qt 6 build environment and a display decision, see [DEVELOPMENT.md](DEVELOPMENT.md) |
 
 ## Component diagram
@@ -140,6 +143,7 @@ as a convenience (OpenAI-compatible `/models`, Ollama `/api/tags`).
 | Exfiltration through untrusted model output | Markdown is rendered by our own block renderer: no HTML, no automatic remote image loading, links shown with their real target and only opened on explicit click for `http(s)` and `mailto` schemes. |
 | Hidden data collection | No telemetry, analytics, clipboard reads or screen capture. Copy buttons only write. |
 | Abuse of the local IPC | D-Bus interface limited to `Toggle`, `Show`, `Hide`. |
+| Tampered configuration file redirecting a provider to another host | Each key is stored with the origin it was saved for and released only for that origin; changing the endpoint requires saving the key again. The file is written atomically with mode `0600`, and a file writable by group or others is refused. Keys found in the file are rejected without being echoed. |
 | Supply chain | Minimal dependencies, committed `Cargo.lock`, `cargo audit` and `cargo deny` in CI, secret scanning (see [SECURITY.md](../SECURITY.md)). |
 
 Configuration lives in `$XDG_CONFIG_HOME/popupai/config.toml`, written atomically

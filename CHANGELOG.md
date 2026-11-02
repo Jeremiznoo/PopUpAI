@@ -25,3 +25,12 @@ All notable changes are documented here. The format follows
   listing and a typed error taxonomy. Redirects are never followed and keys are
   only sent in headers. 39 unit tests and 17 end-to-end tests against a local
   scripted server. Not yet verified against the live services.
+- `popupai-core` configuration: TOML settings with validation, atomic `0600`
+  storage, refusal of keys in the file and of files writable by others.
+- API keys bound to the endpoint they were saved for, so editing an endpoint in
+  the configuration file cannot redirect a stored key to another host.
+- Request orchestrator: one in-flight request, cancellation (Stop, dismissal
+  policy, expiry), provider reuse for warm connections, readable error messages,
+  and logs that carry only metadata. Verified by a test that captures all logs.
+- `ProviderError::Unreachable` for refused connections, and `Debug` output of
+  session messages that shows sizes instead of text.
