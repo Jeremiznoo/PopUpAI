@@ -16,10 +16,18 @@ pub enum Role {
     Assistant,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Message {
     pub role: Role,
     pub text: String,
+}
+
+/// Conversations are private: `Debug` shows the size, never the text, so a
+/// stray `{:?}` cannot put a prompt or an answer into a log.
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Message({:?}, {} bytes)", self.role, self.text.len())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

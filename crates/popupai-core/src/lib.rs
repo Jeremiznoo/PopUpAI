@@ -4,4 +4,7 @@
 //! rule can be unit-tested without a desktop.
 
 pub mod config;
+pub mod credentials;
+pub mod orchestrator;
+pub mod request_error;
 pub mod session;
