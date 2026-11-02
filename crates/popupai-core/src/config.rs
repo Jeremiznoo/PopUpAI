@@ -209,6 +209,21 @@ impl ProviderKind {
         }
     }
 
+    /// The model used when none is configured: the lightest and cheapest the vendor
+    /// offers, since the popup is for quick questions. These names come from the
+    /// vendors' own model pages (consulted 2026-11-02); they are free text in the
+    /// configuration and are meant to be overridden. Empty for Ollama, where the
+    /// smallest installed model is picked at request time, and for compatible
+    /// servers, which can serve anything.
+    pub fn default_model(self) -> &'static str {
+        match self {
+            Self::Anthropic => "claude-haiku-5-5",
+            Self::OpenAi => "gpt-6-luna",
+            Self::Gemini => "gemini-3.5-flash-lite",
+            Self::Ollama | Self::OpenAiCompatible => "",
+        }
+    }
+
     /// Whether the service cannot be used without an API key.
     pub fn requires_key(self) -> bool {
         matches!(self, Self::OpenAi | Self::Anthropic | Self::Gemini)
@@ -253,6 +268,17 @@ impl ProviderEntry {
             max_tokens: None,
             timeout_secs: None,
             allow_insecure_http: false,
+        }
+    }
+
+    /// The model to ask for: the configured one, else the kind's lightest default.
+    /// Empty only for kinds that have no default (see [`ProviderKind::default_model`]).
+    pub fn effective_model(&self) -> &str {
+        let model = self.model.trim();
+        if model.is_empty() {
+            self.kind.default_model()
+        } else {
+            model
         }
     }
 
@@ -373,6 +399,25 @@ impl Config {
             .map_err(|e: toml::de::Error| ConfigError::Parse(redact(&e.to_string())))?;
         config.validate().map_err(ConfigError::Invalid)?;
         Ok(config)
+    }
+
+    /// The configuration of a first run: one entry per well-known provider, each on
+    /// its lightest model, so the popup works as soon as a key is added (or, for
+    /// Ollama, a model is installed). Nothing is written to disk by this.
+    pub fn builtin() -> Self {
+        let entry = |id: &str, kind: ProviderKind, name: &str| ProviderEntry {
+            name: Some(name.to_owned()),
+            ..ProviderEntry::new(id, kind)
+        };
+        Self {
+            providers: vec![
+                entry("anthropic", ProviderKind::Anthropic, "Claude"),
+                entry("openai", ProviderKind::OpenAi, "OpenAI"),
+                entry("gemini", ProviderKind::Gemini, "Gemini"),
+                entry("ollama", ProviderKind::Ollama, "Ollama"),
+            ],
+            ..Self::default()
+        }
     }
 
     /// The configured global shortcut, parsed.
@@ -504,11 +549,12 @@ impl Config {
         }
     }
 
-    /// Read a configuration file. A missing file means defaults.
+    /// Read a configuration file. A missing file means the first-run configuration
+    /// ([`Config::builtin`]).
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let meta = match fs::metadata(path) {
             Ok(meta) => meta,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Self::default()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Self::builtin()),
             Err(e) => return Err(io_error("read", path, &e)),
         };
         if !meta.is_file() || meta.len() > MAX_CONFIG_BYTES {
@@ -818,6 +864,49 @@ mod tests {
     }
 
     #[test]
+    fn the_first_run_configuration_is_valid_and_uses_the_lightest_models() {
+        let config = Config::builtin();
+        config
+            .validate()
+            .expect("the built-in configuration is valid");
+        let models: Vec<(&str, &str)> = config
+            .providers
+            .iter()
+            .map(|p| (p.id.as_str(), p.effective_model()))
+            .collect();
+        assert_eq!(
+            models,
+            [
+                ("anthropic", "claude-haiku-5-5"),
+                ("openai", "gpt-6-luna"),
+                ("gemini", "gemini-3.5-flash-lite"),
+                ("ollama", ""),
+            ]
+        );
+        // None of them carries a key or a non-default endpoint.
+        assert!(config.providers.iter().all(|p| p.endpoint.is_none()));
+        let reloaded = Config::from_toml(&toml::to_string_pretty(&config).unwrap()).unwrap();
+        assert_eq!(reloaded, config);
+    }
+
+    #[test]
+    fn a_configured_model_wins_over_the_default() {
+        let mut entry = ProviderEntry::new("anthropic", ProviderKind::Anthropic);
+        assert_eq!(entry.effective_model(), "claude-haiku-5-5");
+        entry.model = "  claude-opus-5-5 ".into();
+        assert_eq!(entry.effective_model(), "claude-opus-5-5");
+        entry.model = "   ".into();
+        assert_eq!(entry.effective_model(), "claude-haiku-5-5");
+
+        let compat = ProviderEntry::new("c", ProviderKind::OpenAiCompatible);
+        assert_eq!(
+            compat.effective_model(),
+            "",
+            "no default for a custom server"
+        );
+    }
+
+    #[test]
     fn session_settings_map_to_the_session_policy() {
         let mut settings = SessionSettings::default();
         assert_eq!(settings.policy().dismiss, DismissPolicy::FinishInBackground);
@@ -832,8 +921,8 @@ mod tests {
         let path = tmp.0.join("config.toml");
         assert_eq!(
             Config::load(&path).unwrap(),
-            Config::default(),
-            "missing file means defaults"
+            Config::builtin(),
+            "a missing file means the first-run configuration"
         );
 
         let config = sample();

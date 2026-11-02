@@ -25,6 +25,19 @@ impl OllamaProvider {
         })
     }
 
+    /// The installed chat model that takes the least disk space.
+    async fn smallest_installed(&self) -> Result<String, ProviderError> {
+        let builder = self.client.get(self.config.endpoint.join("api/tags"));
+        let response = send(self.authorize(builder)?).await?;
+        let body = read_json(response).await?;
+        smallest_model(&body).ok_or_else(|| {
+            ProviderError::InvalidRequest(
+                "no model is installed in Ollama; install one, for example with `ollama pull llama3.2:1b`"
+                    .into(),
+            )
+        })
+    }
+
     fn authorize(&self, builder: RequestBuilder) -> Result<RequestBuilder, ProviderError> {
         match &self.config.api_key {
             Some(key) => Ok(builder.header(
@@ -46,6 +59,12 @@ impl Provider for OllamaProvider {
         request: ChatRequest,
     ) -> BoxFuture<'_, Result<ChatStream, ProviderError>> {
         Box::pin(async move {
+            let mut request = request;
+            if request.model.trim().is_empty() {
+                // No model chosen: use the smallest one installed, which is the
+                // lightest answer to "which model should a quick question use".
+                request.model = self.smallest_installed().await?;
+            }
             request.validate()?;
             let builder = self
                 .client
@@ -64,6 +83,24 @@ impl Provider for OllamaProvider {
             Ok(collect_ids(body.get("models"), "name"))
         })
     }
+}
+
+/// The smallest model in an `/api/tags` reply. Models whose name says they only
+/// produce embeddings cannot answer a question and are skipped.
+fn smallest_model(tags: &Value) -> Option<String> {
+    tags.get("models")?
+        .as_array()?
+        .iter()
+        .filter_map(|model| {
+            let name = model.get("name")?.as_str()?;
+            let size = model
+                .get("size")
+                .and_then(Value::as_u64)
+                .unwrap_or(u64::MAX);
+            (!name.to_ascii_lowercase().contains("embed")).then(|| (size, name.to_owned()))
+        })
+        .min()
+        .map(|(_, name)| name)
 }
 
 fn chat_body(request: &ChatRequest) -> Value {
@@ -246,5 +283,37 @@ mod tests {
             &[b"{\"message\":{\"content\":\"a\"},\"done\":true}"],
         );
         assert!(matches!(&items[..], [Ok(a)] if a == "a"));
+    }
+
+    #[test]
+    fn the_smallest_chat_model_is_picked() {
+        let tags = json!({"models": [
+            {"name": "llama3.2:3b", "size": 2_000_000_000u64},
+            {"name": "qwen3:0.6b", "size": 520_000_000u64},
+            {"name": "nomic-embed-text:latest", "size": 270_000_000u64},
+            {"name": "gemma3:12b", "size": 8_100_000_000u64},
+        ]});
+        assert_eq!(smallest_model(&tags).as_deref(), Some("qwen3:0.6b"));
+    }
+
+    #[test]
+    fn no_chat_model_installed_gives_none() {
+        assert_eq!(smallest_model(&json!({"models": []})), None);
+        assert_eq!(
+            smallest_model(&json!({"models": [{"name": "nomic-embed-text", "size": 1}]})),
+            None
+        );
+        assert_eq!(smallest_model(&json!({})), None);
+        assert_eq!(smallest_model(&json!({"models": "nope"})), None);
+    }
+
+    #[test]
+    fn a_model_without_a_size_is_only_picked_when_nothing_else_is() {
+        let tags = json!({"models": [{"name": "unknown"}, {"name": "known", "size": 5}]});
+        assert_eq!(smallest_model(&tags).as_deref(), Some("known"));
+        assert_eq!(
+            smallest_model(&json!({"models": [{"name": "unknown"}]})).as_deref(),
+            Some("unknown")
+        );
     }
 }

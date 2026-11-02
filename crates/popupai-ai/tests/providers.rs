@@ -187,6 +187,41 @@ async fn ollama_streams_ndjson_without_authentication() {
 }
 
 #[tokio::test]
+async fn ollama_without_a_model_uses_the_smallest_installed_one() {
+    let mock = Mock::start(|req| match req.target.as_str() {
+        "/api/tags" => Reply::json(
+            r#"{"models":[{"name":"llama3.2:3b","size":2000000000},{"name":"qwen3:0.6b","size":520000000}]}"#,
+        ),
+        "/api/chat" => Reply::stream(&[
+            "{\"message\":{\"content\":\"ok\"},\"done\":false}\n{\"message\":{\"content\":\"\"},\"done\":true}\n",
+        ]),
+        other => Reply::status(404, &format!("{{\"error\":\"unexpected {other}\"}}")),
+    })
+    .await;
+    let provider = OllamaProvider::new(config(&mock, "")).unwrap();
+
+    assert_eq!(
+        text(ok(provider.stream_chat(request("")).await)).await,
+        "ok"
+    );
+
+    let requests = mock.requests();
+    assert_eq!(requests[0].target, "/api/tags");
+    assert_eq!(requests[1].target, "/api/chat");
+    assert_eq!(requests[1].body_json()["model"], "qwen3:0.6b");
+}
+
+#[tokio::test]
+async fn ollama_with_no_model_installed_says_how_to_install_one() {
+    let mock = Mock::start(|_| Reply::json(r#"{"models":[]}"#)).await;
+    let provider = OllamaProvider::new(config(&mock, "")).unwrap();
+    let error = err(provider.stream_chat(request("")).await);
+    let message = error.to_string();
+    assert!(message.contains("ollama pull"), "{message}");
+    assert_eq!(mock.requests().len(), 1, "no chat request is sent");
+}
+
+#[tokio::test]
 async fn every_adapter_lists_models() {
     let mock = Mock::start(|req| match req.target.split('?').next().unwrap() {
         "/api/tags" => Reply::json(r#"{"models":[{"name":"qwen2.5:3b"},{"name":"llama3.2:latest"}]}"#),

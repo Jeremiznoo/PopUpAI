@@ -341,7 +341,7 @@ impl Orchestrator {
             .as_deref()
             .and_then(|id| state.config.provider(id))
             .or_else(|| state.config.default_provider())?;
-        let model = entry.model.trim();
+        let model = entry.effective_model();
         Some(if model.is_empty() {
             entry.display_name().to_owned()
         } else {
@@ -438,7 +438,8 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
             entry: None,
         }));
     };
-    if entry.model.trim().is_empty() {
+    // Ollama may have no model set: the adapter then uses the smallest installed one.
+    if entry.effective_model().is_empty() && entry.kind != ProviderKind::Ollama {
         return Err(Box::new(SetupFailure {
             error: RequestError::NoModel,
             entry: Some(entry),
@@ -463,7 +464,7 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
         .unwrap_or_default();
     let advanced = &state.config.advanced;
     let request = ChatRequest {
-        model: entry.model.trim().to_owned(),
+        model: entry.effective_model().to_owned(),
         messages,
         system_prompt: advanced
             .system_prompt
@@ -490,7 +491,7 @@ async fn answer(inner: &Arc<Inner>, id: SessionId, job: &Job) -> Result<(), Requ
     tracing::info!(
         provider = %job.entry.id,
         kind = ?job.entry.kind,
-        model = %job.entry.model,
+        model = %job.request.model,
         messages = job.request.messages.len(),
         "request started"
     );

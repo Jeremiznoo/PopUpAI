@@ -19,6 +19,8 @@ ashpd = { version = "0.13", default-features = false, features = ["tokio", "glob
 bytes = "1"
 futures-util = "0.3"
 # Default TLS is rustls; `system-proxy` stays on so corporate proxies work.
+# Pure-Rust crypto for the Secret Service session (no OpenSSL), zbus on Tokio.
+secret-service = { version = "5.2", default-features = false, features = ["rt-tokio-crypto-rust"] }
 reqwest = { version = "0.13", features = ["stream", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
