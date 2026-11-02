@@ -333,6 +333,22 @@ impl Orchestrator {
         self.inner.state().sessions.detached().is_some()
     }
 
+    /// Name and model of the provider the next question would use, for display.
+    pub fn provider_label(&self) -> Option<String> {
+        let state = self.inner.state();
+        let entry = state
+            .selected
+            .as_deref()
+            .and_then(|id| state.config.provider(id))
+            .or_else(|| state.config.default_provider())?;
+        let model = entry.model.trim();
+        Some(if model.is_empty() {
+            entry.display_name().to_owned()
+        } else {
+            format!("{} \u{b7} {model}", entry.display_name())
+        })
+    }
+
     pub fn view(&self) -> Option<SessionView> {
         let state = self.inner.state();
         state.sessions.active().map(|s| SessionView {
@@ -501,7 +517,21 @@ async fn provider_for(inner: &Arc<Inner>, job: &Job) -> Result<Arc<dyn Provider>
     let endpoint = job.entry.endpoint().map_err(ProviderError::from)?;
     let origin = endpoint.origin();
     let (store, id) = (inner.store.clone(), job.entry.id.clone());
-    let key = blocking(move || credentials::load_key(&*store, &id, &origin)).await?;
+    let key = match blocking(move || credentials::load_key(&*store, &id, &origin)).await {
+        Ok(key) => key,
+        // A local server such as Ollama needs no key, so an unavailable secret
+        // store must not stop it. Providers that do need a key still fail below.
+        Err(CredentialError::Store(StoreError::Unavailable(_)))
+            if !job.entry.kind.requires_key() =>
+        {
+            tracing::warn!(
+                provider = %job.entry.id,
+                "secret store unavailable; continuing without an API key"
+            );
+            None
+        }
+        Err(err) => return Err(err.into()),
+    };
     let provider = inner
         .factory
         .build(&job.entry, endpoint, key, job.timeout)?;
@@ -519,7 +549,7 @@ mod tests {
     use futures_util::future::BoxFuture;
     use futures_util::stream;
     use popupai_ai::{ChatStream, ModelInfo};
-    use popupai_security::MemoryStore;
+    use popupai_security::{MemoryStore, UnavailableStore};
     use tokio::time::timeout;
 
     use super::*;
@@ -1011,5 +1041,99 @@ mod tests {
         assert!(h.orch.set_config(invalid).is_err());
         assert!(h.orch.select_provider("fake"));
         assert!(!h.orch.select_provider("missing"));
+    }
+
+    /// An orchestrator whose secret store cannot be opened.
+    struct Offline {
+        orch: Orchestrator,
+        events: UnboundedReceiver<Event>,
+        fake: Arc<Fake>,
+        builds: Arc<Mutex<Vec<Built>>>,
+    }
+
+    fn with_unavailable_store(config: Config) -> Offline {
+        let fake = Arc::new(Fake::default());
+        let builds = Arc::new(Mutex::new(Vec::new()));
+        let factory = Arc::new(FakeFactory {
+            fake: fake.clone(),
+            builds: builds.clone(),
+        });
+        let store = Arc::new(UnavailableStore::new("no Secret Service"));
+        let (orch, events) = Orchestrator::new(config, store, factory).unwrap();
+        Offline {
+            orch,
+            events,
+            fake,
+            builds,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_keyless_local_provider_works_even_when_the_secret_store_is_unavailable() {
+        let Offline {
+            orch,
+            mut events,
+            fake,
+            builds,
+        } = with_unavailable_store(config());
+        let (tx, rx) = unbounded_channel();
+        fake.feeds.lock().unwrap().push_back(rx);
+
+        orch.open();
+        orch.submit("hi").unwrap();
+        tx.send(Ok("ok".into())).unwrap();
+        drop(tx);
+
+        while !matches!(next(&mut events).await, Event::Finished { .. }) {}
+        let builds = builds.lock().unwrap();
+        assert_eq!(builds.len(), 1);
+        assert_eq!(
+            builds[0].key, None,
+            "no key is invented when the store cannot be read"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_provider_that_needs_a_key_explains_that_the_secret_store_is_unavailable() {
+        let mut settings = config();
+        settings.providers[0].kind = ProviderKind::OpenAi;
+        settings.providers[0].endpoint = None;
+        let Offline {
+            orch,
+            mut events,
+            builds,
+            ..
+        } = with_unavailable_store(settings);
+
+        orch.open();
+        orch.submit("hi").unwrap();
+
+        let Event::Failed { message, .. } = next(&mut events).await else {
+            panic!("expected a failure");
+        };
+        assert!(message.contains("no secure secret store"), "{message}");
+        assert!(
+            builds.lock().unwrap().is_empty(),
+            "nothing is built without the key"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_provider_label_names_the_provider_and_its_model() {
+        let h = harness(config());
+        assert_eq!(
+            h.orch.provider_label().as_deref(),
+            Some("fake \u{b7} test-model")
+        );
+
+        let mut blank = config();
+        blank.providers[0].model = String::new();
+        blank.providers[0].name = Some("LM Studio".into());
+        assert_eq!(
+            harness(blank).orch.provider_label().as_deref(),
+            Some("LM Studio")
+        );
+
+        assert_eq!(harness(Config::default()).orch.provider_label(), None);
     }
 }
