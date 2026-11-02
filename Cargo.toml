@@ -4,6 +4,7 @@ members = [
     "crates/popupai-core",
     "crates/popupai-security",
     "crates/popupai-ai",
+    "crates/popupai-platform",
     "crates/popupai-app",
 ]
 
@@ -26,6 +27,8 @@ toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 url = "2"
+# Version 5 is what ashpd, ksni and the Secret Service store need, so one copy is built.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
 zeroize = "1"
 
 [workspace.lints.rust]
