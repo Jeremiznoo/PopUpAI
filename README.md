@@ -5,8 +5,10 @@ corner of your screen with the input already focused, type a question, read the
 streamed answer, click anywhere else and it disappears. Each opening is a fresh,
 unsaved session.
 
-> **Status: pre-alpha, design phase.** There is no runnable application yet.
-> Everything below describes the target, and is marked with what is verified.
+> **Status: pre-alpha.** The application builds and its logic is covered by 230
+> automated tests (plus one that is ignored on purpose, see below), but it has **not been run end to end on a real session with a real
+> provider yet**. [What is verified, and what is not](docs/PLATFORM_COMPATIBILITY.md) is
+> written down feature by feature; nothing below is claimed beyond that.
 
 ## Goals
 
@@ -17,20 +19,51 @@ No telemetry, no forced account, no hidden conversation history.
 
 | Platform | State |
 |---|---|
-| Fedora Linux + KDE Plasma 6 (Wayland) | Primary target. Environment audited, design written, nothing exercised yet. |
+| Fedora Linux + KDE Plasma 6 (Wayland) | Primary target. The popup was shown and used on a real Plasma session during the spikes; the shortcut, tray and wallet code is tested against mocks and still has to be run on the real session. |
 | KDE on X11 | Planned (via Qt `xcb`). |
 | Windows 10/11, macOS | Architecture allows it. Not started. |
 
 Details and the honest verification state: [docs/PLATFORM_COMPATIBILITY.md](docs/PLATFORM_COMPATIBILITY.md).
 
-## Planned providers
+## Using it
 
-OpenAI, Anthropic, Google Gemini, Ollama (local), and any OpenAI-compatible
-endpoint (LM Studio, LocalAI, vLLM, OpenRouter, and so on). Model identifiers are
-free text; no closed model list. Local models are never downloaded automatically.
+Start `popupai` once (autostart is a setting, see below). Press **Ctrl+Shift+Space**
+(the default), type, press **Enter**. **Esc**, a click elsewhere, or the shortcut again
+closes it; the next opening is a fresh session. **Ctrl+P** (or a click on the dim line
+under the field) switches provider, **Stop** or **Ctrl+.** cancels an answer, **Copy**
+copies it.
 
-State: the adapters are implemented and tested against a local scripted server,
-but have **not** yet been run against the live services.
+Without a working global shortcut (the popup says so), bind the command
+`popupai --toggle` in *System Settings, Shortcuts*. Settings live in
+`~/.config/popupai/config.toml` (created with mode 0600); there is no settings window yet.
+
+The popup is deliberately bare: one field, the answer above it, one dim line.
+
+## Providers and default models
+
+OpenAI, Anthropic, Google Gemini, Ollama (local), and any OpenAI-compatible endpoint
+(LM Studio, LocalAI, vLLM, OpenRouter, and so on). Model identifiers are free text.
+Out of the box each provider uses the **lightest** model its vendor offers, since the
+popup is for quick questions:
+
+| Provider | Default model | Where the name comes from |
+|---|---|---|
+| Anthropic | `claude-haiku-5-5` | the vendor's model overview, 2026-11-02 |
+| OpenAI | `gpt-6-luna` | the vendor's model page, 2026-11-02 |
+| Google Gemini | `gemini-3.5-flash-lite` | the vendor's model page, 2026-11-02 |
+| Ollama | the smallest chat model installed | asked from your Ollama server at request time |
+
+Override any of them with `model = "…"` on the provider in the configuration file.
+
+**First use.** With no key stored, PopUpAI starts on Ollama if you have it. To use a
+hosted provider, switch to it (Ctrl+P): the field turns into a masked key field, and
+the key you paste goes straight to the system secret store (KDE Wallet, GNOME Keyring or
+KeePassXC) and is never written to a file. Local models are never downloaded for you:
+install one yourself, for example `ollama pull llama3.2:1b`.
+
+**Not verified:** the adapters are tested against a scripted local server, and the model
+names above come from vendor documentation. **No request has been sent to a live service
+yet.** The first real use is also the first real test: please report what you see.
 
 ## Security and privacy model
 
@@ -46,6 +79,16 @@ default. See [SECURITY.md](SECURITY.md) and the threat table in
 - [Environment report](docs/ENVIRONMENT_REPORT.md)
 - [Development setup](docs/DEVELOPMENT.md)
 - [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+
+## Install for your user
+
+```bash
+tools/install-local.sh            # binary in ~/.local/bin, launcher in ~/.local/share/applications
+tools/install-local.sh --remove
+```
+
+Set `launch_at_startup = true` under `[general]` in the configuration file to start with
+your session: that writes one entry in `~/.config/autostart`, and nothing else.
 
 ## Development
 

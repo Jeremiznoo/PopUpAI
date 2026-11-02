@@ -5,6 +5,37 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (since the first popup)
+
+- Global shortcut through the XDG GlobalShortcuts portal (`popupai-platform`): registers
+  the application id, binds one `toggle` shortcut with the preferred trigger converted to
+  the portal format, turns `Activated` into a toggle, reports active / no key assigned /
+  unavailable, and never falls back silently. Tested against a **mock portal** on a
+  private bus; not yet run against KDE.
+- Platform-neutral shortcut parsing and validation (`popupai-core::shortcut`).
+- API keys in the system secret store through the Secret Service API (encrypted session),
+  failing closed when no service runs. The round trip against the real service is an
+  ignored test that must be run on purpose.
+- Lightest model per provider by default (`claude-haiku-5-5`, `gpt-6-luna`,
+  `gemini-3.5-flash-lite`); Ollama uses the smallest installed chat model. A missing
+  configuration yields one entry per well-known provider.
+- Provider list, switching (Ctrl+P, persisted unless the settings file was unreadable),
+  automatic start on the first usable provider, and detection of a missing API key.
+- Masked API key entry in the popup, handed straight to the secret store.
+- Sanitised Markdown rendering of answers: a whitelist of tags with no attribute, no
+  image, no link, raw HTML escaped.
+- Notification-area icon (StatusNotifierItem), autostart entry driven by
+  `launch_at_startup`, desktop file and a per-user install script. Binary renamed `popupai`.
+
+### Changed (since the first popup)
+
+- The popup is minimal: one field at the bottom, the answer growing above it, one dim
+  line with the model and the actions that apply.
+- The headless smoke test and the private test buses have no D-Bus service directories,
+  so a test can never start the real desktop portal.
+- Commit history rewritten once (local only, never pushed) to remove a tool attribution
+  trailer from every message; the repository has a single author.
+
 ### Added
 
 - Repository scaffolding: `.gitignore`, `.env.example` (placeholders only).

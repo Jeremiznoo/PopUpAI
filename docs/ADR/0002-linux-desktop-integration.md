@@ -7,7 +7,7 @@
   with no click); S3 passed (an outside click deactivates the window and still
   reaches the window underneath, on the user's confirmation); S1 passed (the user
   confirmed by eye that the popup sits in the bottom-right corner and is readable);
-  S4 to S6 are not started.
+  S4 (shortcut) and S5 (tray) are implemented and tested against mocks of the portal and of a StatusNotifier host, and still have to be run on the real session; S6 is not started.
 - **Depends on:** [ADR 0001](0001-technology-stack.md)
 
 ## Constraints (Wayland)

@@ -12,17 +12,18 @@ recorded in [docs/ADR/](ADR/): [0001 stack](ADR/0001-technology-stack.md),
 |---|---|---|
 | `popupai-core`: session lifecycle (ADR 0003) | Implemented | 15 unit tests |
 | `popupai-security`: `Secret`, `Endpoint` validation, log redaction, `SecretStore` trait | Implemented | 20 unit tests |
-| `popupai-security`: OS secret store backend (Secret Service / KWallet) | **Not implemented**; only the fail-closed `UnavailableStore` exists | Cannot be exercised from the build container, which has no session bus |
+| `popupai-platform`: OS secret store backend (Secret Service: KDE Wallet, GNOME Keyring, KeePassXC) | Implemented; fails closed when no service runs | 4 unit tests, plus a private-bus test showing every operation fails closed. The **round trip against the real wallet is an ignored test, not yet run** |
+| `popupai-core`: Markdown renderer (whitelisted tags, no attribute, no image, no link) | Implemented | 12 unit tests, including hostile inputs and half-finished streams |
+| `popupai-core`: lightest default model per provider, Ollama smallest-installed model | Implemented | Unit tests and end-to-end tests against the scripted server. The vendor model names come from their documentation and are **not verified by a live call** |
 | `popupai-ai`: OpenAI, OpenAI-compatible, Anthropic, Gemini, Ollama adapters, streaming, cancellation, error taxonomy | Implemented | 39 unit tests and 17 end-to-end tests against a scripted local server |
 | `popupai-ai` against the live services | **Not verified** | Wire formats come from public documentation and offline fixtures; no real request has been made |
 | `popupai-core`: configuration (validation, atomic `0600` storage, no keys in the file) | Implemented | 13 unit tests |
 | `popupai-core`: API keys bound to their endpoint, user-facing error messages | Implemented | 8 and 5 unit tests |
 | `popupai-core`: request orchestrator (single in-flight request, cancellation, connection reuse, metadata-only logs) | Implemented | 13 unit tests with a scripted provider, plus a log-privacy test in its own binary |
 | Orchestrator with the real adapters | **Not verified** | Tested with a scripted provider; the adapters are tested separately against a local server |
-| `popupai-app`: QML popup, cxx-qt controller, view model, configuration path | Implemented as a first one-shot popup (it opens at start-up and quits when dismissed). It builds, the view model and path logic have 17 unit tests, and it starts and loads its QML with no warnings on a headless platform | Shown on screen on 2026-11-02 with the fake Ollama server. The application's own logs show the full path: a question typed and sent from the keyboard, the answer (209 bytes) streamed to completion, and the popup closed on loss of focus (`reason=focus lost`). The layout, Stop and Copy are **not yet confirmed** |
+| `popupai-app`: minimal QML popup, cxx-qt controller, view model, key entry, provider switching | Implemented and resident | Logic: unit tests; 22 headless checks on a private bus (single instance, toggle, fresh sessions, quit, graceful absence of portal, tray and wallet). On screen: the earlier layout was observed on 2026-11-02; **the minimal layout and the key field have not been looked at on screen yet** |
 | `popupai-platform`: single instance and remote commands (`--toggle`, `--background`, `--quit`) over D-Bus | Implemented. The app is now resident: dismissing hides the window and a later command shows it with a fresh session | 5 tests on a private `dbus-daemon`, plus `tools/smoke-resident.sh` (19 checks, headless, private bus). Not yet tried on screen across several show and hide cycles |
-| `popupai-platform`: global shortcut, tray, autostart | Not started | Spikes S4 and S5 touch the user's session and need approval |
-| Secret Service backend | Not started | Testable natively now |
+| `popupai-platform`: global shortcut (XDG portal), tray (StatusNotifierItem), autostart (XDG entry) | Implemented and wired into the application | 15 tests of the shortcut client (4 unit, 11 end to end against a **mock portal**), 5 of the tray (4 unit, 1 against a **mock host** run as a child process), 5 of autostart on a temporary folder. **None of it has run against the real KDE session yet** |
 
 ## Component diagram
 
