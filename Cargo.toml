@@ -1,12 +1,27 @@
 [workspace]
 resolver = "3"
-members = ["crates/popupai-core"]
+members = [
+    "crates/popupai-core",
+    "crates/popupai-security",
+    "crates/popupai-ai",
+]
 
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
 # Not publishable until a license is chosen (see README).
 publish = false
+
+[workspace.dependencies]
+bytes = "1"
+futures-util = "0.3"
+# Default TLS is rustls; `system-proxy` stays on so corporate proxies work.
+reqwest = { version = "0.13", features = ["stream", "json"] }
+serde_json = "1"
+thiserror = "2"
+tokio = "1"
+url = "2"
+zeroize = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

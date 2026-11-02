@@ -1,0 +1,20 @@
+[package]
+name = "popupai-ai"
+description = "PopUpAI provider layer: OpenAI, Anthropic, Gemini, Ollama and OpenAI-compatible adapters with streaming and cancellation."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+popupai-security = { path = "../popupai-security" }
+bytes.workspace = true
+futures-util.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
