@@ -29,6 +29,9 @@ OpenAI, Anthropic, Google Gemini, Ollama (local), and any OpenAI-compatible
 endpoint (LM Studio, LocalAI, vLLM, OpenRouter, and so on). Model identifiers are
 free text; no closed model list. Local models are never downloaded automatically.
 
+State: the adapters are implemented and tested against a local scripted server,
+but have **not** yet been run against the live services.
+
 ## Security and privacy model
 
 API keys go in the operating system's secret store, never in files, logs or Git.
@@ -58,7 +61,9 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Known limitations
 
-- Not implemented yet.
+- Only the session, security and provider logic exist. There is no popup, global
+  shortcut, tray or UI yet.
+- The operating system secret store backend is not written yet.
 - On Wayland, corner placement, initial focus and outside-click dismissal depend
   on compositor support that has been confirmed to be *advertised* on KDE Plasma
   6.8 but not yet tested.

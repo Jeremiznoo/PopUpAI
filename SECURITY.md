@@ -31,7 +31,9 @@ The full threat table is in
 
 - `.env` and key material are git-ignored; `.env.example` holds placeholders only.
 - Recommended before every push: a secret scanner such as `gitleaks` as a
-  pre-commit hook and in CI.
+  pre-commit hook and in CI. Test fixtures contain obviously fake keys (alphabet
+  sequences) to exercise redaction; allow-list them in the scanner configuration
+  rather than weakening the tests.
 - Dependencies: commit `Cargo.lock`, run `cargo audit` and `cargo deny check` in
   CI, and review new dependencies before adding them.
 - If a real credential is ever committed, treat it as compromised: revoke it at

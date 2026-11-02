@@ -76,9 +76,35 @@ download from `static.rust-lang.org` and crates.io.
 
 - Container created from the installed image; configuration as in the table above.
 - Rust 1.99.1, cargo, clippy and rustfmt run as uid 1000.
-- `popupai-core`: `cargo fmt --check`, `cargo clippy -D warnings` and
-  `cargo test` pass (15 unit tests).
+- Workspace: `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test` pass,
+  91 tests in total: `popupai-core` 15, `popupai-security` 20, `popupai-ai` 39 unit
+  and 17 end-to-end.
+- The end-to-end tests talk to a scripted HTTP server on the container's loopback
+  interface. They check the headers actually sent (the key is only ever in a
+  header, never in the URL or body), error mapping, refusal to follow redirects,
+  timeouts, mid-stream failures, and that dropping a stream closes the connection.
+- The redirect test was checked to have teeth: with redirects enabled it fails.
 - No file in the project is owned by root.
+
+### Not verified
+
+- **No provider has been called for real.** Request and response formats were
+  written from the providers' public documentation and tested with fixtures.
+  Details that could differ on the live services include the OpenAI
+  `max_completion_tokens` parameter, Gemini's `finishReason` handling and the
+  model-list response shapes. Opt-in live tests (`#[ignore]`, keys from
+  `.env.example`) are still to be written, and need real keys.
+- **The OS secret store backend** is not written, and cannot be tested in this
+  container, which has no Secret Service on a session bus.
+- **Ollama** was installed on the host but not running when the machine was
+  audited, so the Ollama adapter has only been tested against the scripted server.
+
+### A build-cache pitfall
+
+Cargo decides whether to rebuild from file modification times. If a source file is
+restored from a backup with an older timestamp (for example after a manual
+experiment), cargo may reuse a stale binary. `touch` the file to force a rebuild.
+This happened once during development and was caught by the full test run.
 
 ## Known gap: the Qt shell cannot be built in this container yet
 

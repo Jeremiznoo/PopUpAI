@@ -17,3 +17,11 @@ All notable changes are documented here. The format follows
   (`scripts/dev.sh`, `rust-toolchain.toml`): nothing is installed on the host.
 - Cargo workspace and `popupai-core` with the session state machine from
   ADR 0003, covered by 15 unit tests.
+- `popupai-security`: `Secret` (redacted, zeroized), `Endpoint` validation (https
+  required, loopback-only http, no embedded credentials), log redaction, and a
+  fail-closed `SecretStore` trait. 20 unit tests.
+- `popupai-ai`: `Provider` trait and OpenAI, OpenAI-compatible, Anthropic, Gemini
+  and Ollama adapters with streaming, cancellation by dropping the stream, model
+  listing and a typed error taxonomy. Redirects are never followed and keys are
+  only sent in headers. 39 unit tests and 17 end-to-end tests against a local
+  scripted server. Not yet verified against the live services.

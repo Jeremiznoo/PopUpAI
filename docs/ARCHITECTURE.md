@@ -1,9 +1,22 @@
 # Architecture
 
-Status: design, 2026-11-02. No component below is implemented yet. Decisions are
+Status: 2026-11-02. The Qt-free crates are implemented (table below); the desktop
+and UI layers are not started. Decisions are
 recorded in [docs/ADR/](ADR/): [0001 stack](ADR/0001-technology-stack.md),
 [0002 Linux integration](ADR/0002-linux-desktop-integration.md),
 [0003 session policy](ADR/0003-session-and-cancellation-policy.md).
+
+## Implementation status
+
+| Component | State | Verification |
+|---|---|---|
+| `popupai-core`: session lifecycle (ADR 0003) | Implemented | 15 unit tests |
+| `popupai-security`: `Secret`, `Endpoint` validation, log redaction, `SecretStore` trait | Implemented | 20 unit tests |
+| `popupai-security`: OS secret store backend (Secret Service / KWallet) | **Not implemented**; only the fail-closed `UnavailableStore` exists | Cannot be exercised from the build container, which has no session bus |
+| `popupai-ai`: OpenAI, OpenAI-compatible, Anthropic, Gemini, Ollama adapters, streaming, cancellation, error taxonomy | Implemented | 39 unit tests and 17 end-to-end tests against a scripted local server |
+| `popupai-ai` against the live services | **Not verified** | Wire formats come from public documentation and offline fixtures; no real request has been made |
+| `popupai-core`: configuration, request orchestration | Not started | |
+| `popupai-platform`, `popupai-app`, QML UI | Not started | Needs a Qt 6 build environment and a display decision, see [DEVELOPMENT.md](DEVELOPMENT.md) |
 
 ## Component diagram
 
