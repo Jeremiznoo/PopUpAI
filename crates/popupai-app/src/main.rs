@@ -135,7 +135,7 @@ fn main() -> ExitCode {
     let path = config_path::config_path();
     let state_path = path.with_file_name("state.toml");
     let (config, notice) = match Config::load(&path) {
-        Ok(config) => (config, String::new()),
+        Ok(config) => (config.with_missing_builtins(), String::new()),
         Err(err) => (Config::default(), format!("Configuration problem: {err}")),
     };
     // The settings file is only written back when it was read successfully, so a broken

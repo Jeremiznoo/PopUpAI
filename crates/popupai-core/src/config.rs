@@ -434,6 +434,20 @@ impl Config {
         }
     }
 
+    /// Add the well-known providers that this configuration does not define, in memory. A
+    /// file saved by an earlier version lacks the providers added since (ChatGPT, for one);
+    /// without this they would never show up. A provider the file defines under the same id
+    /// is left exactly as written.
+    #[must_use]
+    pub fn with_missing_builtins(mut self) -> Self {
+        for builtin in Self::builtin().providers {
+            if self.providers.iter().all(|p| p.id != builtin.id) {
+                self.providers.push(builtin);
+            }
+        }
+        self
+    }
+
     /// The configured global shortcut, parsed.
     pub fn shortcut(&self) -> Result<crate::shortcut::Chord, crate::shortcut::ChordError> {
         self.general.shortcut.parse()
@@ -902,6 +916,24 @@ mod tests {
         assert!(config.providers.iter().all(|p| p.endpoint.is_none()));
         let reloaded = Config::from_toml(&toml::to_string_pretty(&config).unwrap()).unwrap();
         assert_eq!(reloaded, config);
+    }
+
+    #[test]
+    fn providers_added_since_the_file_was_saved_are_added_but_never_override_it() {
+        let mut saved = Config::builtin();
+        saved.providers.retain(|p| p.id != "chatgpt");
+        saved.providers[0].model = "my-model".into();
+        let merged = saved.with_missing_builtins();
+        let ids: Vec<&str> = merged.providers.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["anthropic", "openai", "gemini", "ollama", "chatgpt"]);
+        assert_eq!(
+            merged.providers[0].model, "my-model",
+            "the file's own entry is kept"
+        );
+        merged.validate().unwrap();
+
+        // An empty configuration (an empty file) gets them all.
+        assert_eq!(Config::default().with_missing_builtins().providers.len(), 5);
     }
 
     #[test]
