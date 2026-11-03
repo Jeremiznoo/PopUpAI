@@ -15,11 +15,16 @@ click elsewhere and it is gone. Each opening is a fresh, unsaved session.
 
 ## Install
 
-```bash
-tools/install-local.sh            # binary in ~/.local/bin, launcher and icon for your user
-tools/install-local.sh --remove
-popupai --setup-shortcut          # bind Ctrl+Shift+Space in your desktop (asks before changing anything)
-```
+Download the package for your distribution from the [latest release](../../releases/latest):
+
+- **Fedora:** `sudo dnf install ./popupai-*.rpm`
+- **Debian:** `sudo apt install ./popupai_*.deb`
+- **Arch Linux:** AUR package coming soon.
+
+Other distributions: `tools/install-local.sh` builds and installs it for your user
+(`--remove` to uninstall).
+
+Then bind the shortcut: `popupai --setup-shortcut` (asks before changing anything).
 
 **PopUpAI does not stay running.** Your desktop's shortcut runs `popupai --toggle`: it starts, shows the
 popup, and quits again once the popup is closed and nothing is being answered. `--setup-shortcut` does the
