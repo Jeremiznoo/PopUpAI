@@ -2,8 +2,8 @@
 
 A prompt to paste into ChatGPT (image generation) to get the logo and the banner of PopUpAI.
 Generate the **logo first**, then ask for the banner reusing it ("use the logo you just made").
-Save the results as `docs/assets/logo.png` and `docs/assets/banner.png`, then uncomment the two
-lines at the top of the README.
+The images it produced are kept in `branding/source/`; the clean versions are described in
+`BRAND.md`.
 
 ## The prompt
 
@@ -56,4 +56,4 @@ imitate an existing logo. Give me each image as a downloadable PNG.
   the name yourself in an image editor.
 - For a crisp vector, ask a second time: "Now redraw the app icon as a clean SVG with at most 6
   shapes."
-- Put the final files in `docs/assets/` and commit them.
+- Put the final files in `branding/` and commit them.

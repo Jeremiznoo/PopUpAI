@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Effects
+import QtQuick.Shapes
 import org.kde.layershell 1.0 as LayerShell
 import io.github.jeremiznoo.popupai
 
@@ -18,6 +19,15 @@ Window {
     property bool settingsOpen: false
     property var allSettings: []
     readonly property bool overlayOpen: pickerOpen || settingsOpen
+
+    // The identity of the application (branding/BRAND.md): the gradient of the logo, one
+    // coral spark, and a violet that reads on both light and dark system themes.
+    readonly property color brandViolet: "#6B4BFA"
+    readonly property color brandBlue: "#3A5BF5"
+    readonly property color brandCyan: "#18D2FF"
+    readonly property color brandPink: "#B85CFF"
+    readonly property color brandCoral: "#FC7C79"
+    readonly property color accentText: palette.window.hslLightness > 0.5 ? "#5B3DE0" : "#A78BFA"
     property var allModels: []
 
     // The popup starts narrow and, as the answer gets longer, widens towards a square so
@@ -321,6 +331,51 @@ Window {
         }
     }
 
+    // The logo, drawn from the same coordinates as branding/logo.svg, so it is sharp at any size.
+    component BrandMark: Item {
+        property real side: 16
+        width: side
+        height: side
+
+        Item {
+            width: 1024
+            height: 1024
+            scale: parent.side / 1024
+            transformOrigin: Item.TopLeft
+
+            Shape {
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+
+                ShapePath {
+                    strokeWidth: 22
+                    strokeColor: popup.brandBlue
+                    joinStyle: ShapePath.RoundJoin
+                    fillGradient: LinearGradient {
+                        x1: 150; y1: 150; x2: 870; y2: 905
+                        GradientStop { position: 0.0; color: popup.brandPink }
+                        GradientStop { position: 0.38; color: popup.brandViolet }
+                        GradientStop { position: 0.64; color: popup.brandBlue }
+                        GradientStop { position: 1.0; color: popup.brandCyan }
+                    }
+                    PathSvg {
+                        path: "M340 150 H684 A190 190 0 0 1 874 340 V650 A190 190 0 0 1 684 840 C704 872 732 900 764 910 C694 906 626 882 584 840 H340 A190 190 0 0 1 150 650 V340 A190 190 0 0 1 340 150 Z"
+                    }
+                }
+                ShapePath {
+                    strokeWidth: 16
+                    strokeColor: "#FCFCFD"
+                    fillColor: "#FCFCFD"
+                    joinStyle: ShapePath.RoundJoin
+                    PathSvg {
+                        path: "M611 388 C623 454 668 497 728 509 C668 521 623 564 611 630 C599 564 554 521 494 509 C554 497 599 454 611 388 Z"
+                    }
+                }
+            }
+            Rectangle { x: 337; y: 318; width: 54; height: 392; radius: 27; color: "#FCFCFD" }
+        }
+    }
+
     component TextButton: Text {
         id: button
         signal clicked()
@@ -428,7 +483,7 @@ Window {
                         height: 7
                         radius: 3.5
                         anchors.verticalCenter: parent.verticalCenter
-                        color: palette.highlight
+                        color: popup.brandViolet
                         opacity: 0.25
 
                         SequentialAnimation on opacity {
@@ -568,7 +623,7 @@ Window {
                 color: palette.base
                 border.width: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus) ? 2 : 1
                 border.color: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus)
-                    ? Qt.alpha(palette.highlight, 0.85) : Qt.alpha(palette.windowText, 0.16)
+                    ? Qt.alpha(popup.brandViolet, 0.9) : Qt.alpha(palette.windowText, 0.16)
 
                 // Send button: appears once there is something to send.
                 Rectangle {
@@ -580,14 +635,18 @@ Window {
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    color: sendArea.containsMouse ? Qt.lighter(palette.highlight, 1.15) : palette.highlight
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: sendArea.containsMouse ? Qt.lighter(popup.brandViolet, 1.2) : popup.brandViolet }
+                        GradientStop { position: 1.0; color: sendArea.containsMouse ? Qt.lighter(popup.brandBlue, 1.2) : popup.brandBlue }
+                    }
 
                     Text {
                         anchors.centerIn: parent
                         text: "\u2191"
                         font.pixelSize: 15
                         font.bold: true
-                        color: palette.highlightedText
+                        color: "#FCFCFD"
                     }
                     MouseArea {
                         id: sendArea
@@ -632,7 +691,7 @@ Window {
                             font.pixelSize: 20
                             font.bold: true
                             font.letterSpacing: 2
-                            color: palette.highlight
+                            color: popup.accentText
                         }
 
                         TextEdit {
@@ -734,8 +793,11 @@ Window {
                 width: parent.width
                 height: 14
 
+                BrandMark { id: footMark; side: 12; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
+
                 TextButton {
-                    anchors.left: parent.left
+                    anchors.left: footMark.right
+                    anchors.leftMargin: 6
                     anchors.right: actions.left
                     anchors.rightMargin: 8
                     elide: Text.ElideRight
@@ -780,7 +842,10 @@ Window {
                 id: settingsHeader
                 width: parent.width
                 height: 20
+                BrandMark { id: settingsMark; side: 18; anchors.verticalCenter: parent.verticalCenter }
                 Text {
+                    anchors.left: settingsMark.right
+                    anchors.leftMargin: 8
                     text: "Settings"
                     font.bold: true
                     font.pixelSize: 13
@@ -842,14 +907,14 @@ Window {
                     text: section
                     font.bold: true
                     font.pixelSize: 12
-                    color: palette.highlight
+                    color: popup.accentText
                 }
 
                 delegate: Rectangle {
                     width: settingsList.width
                     height: 38
                     radius: 8
-                    color: ListView.isCurrentItem ? Qt.alpha(palette.highlight, 0.25) : "transparent"
+                    color: ListView.isCurrentItem ? Qt.alpha(popup.brandViolet, 0.28) : "transparent"
 
                     Column {
                         anchors.left: parent.left
@@ -903,7 +968,10 @@ Window {
                 id: pickerHeader
                 width: parent.width
                 height: 20
+                BrandMark { id: pickerMark; side: 18; anchors.verticalCenter: parent.verticalCenter }
                 Text {
+                    anchors.left: pickerMark.right
+                    anchors.leftMargin: 8
                     text: "Select model"
                     font.bold: true
                     font.pixelSize: 13
@@ -984,14 +1052,14 @@ Window {
                     text: section
                     font.bold: true
                     font.pixelSize: 12
-                    color: palette.highlight
+                    color: popup.accentText
                 }
 
                 delegate: Rectangle {
                     width: list.width
                     height: 26
                     radius: 5
-                    color: ListView.isCurrentItem ? Qt.alpha(palette.highlight, 0.3) : "transparent"
+                    color: ListView.isCurrentItem ? Qt.alpha(popup.brandViolet, 0.28) : "transparent"
 
                     Text {
                         anchors.left: parent.left

@@ -1,12 +1,4 @@
-<!--
-  BANNER: put the image in docs/assets/banner.png (see docs/BRANDING_PROMPT.md to generate it),
-  then remove the comment markers around the next line.
--->
-<!-- <p align="center"><img src="docs/assets/banner.png" alt="PopUpAI" width="100%"></p> -->
-
-<p align="center">
-  <!-- LOGO: <img src="docs/assets/logo.png" alt="" width="96"> -->
-</p>
+<p align="center"><img src="branding/banner.png" alt="PopUpAI: ask anything, anywhere on my desktop" width="100%"></p>
 
 # PopUpAI
 
@@ -158,6 +150,7 @@ default. See [SECURITY.md](SECURITY.md) and the threat table in
 - [Architecture](docs/ARCHITECTURE.md) and [decision records](docs/ADR/)
 - [Environment report](docs/ENVIRONMENT_REPORT.md)
 - [Development setup](docs/DEVELOPMENT.md)
+- [Brand and art direction](branding/BRAND.md)
 - [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 ## Install for your user

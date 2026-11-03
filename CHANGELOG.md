@@ -56,6 +56,12 @@ All notable changes are documented here. The format follows
   already configured by other applications are detected (read-only), switched on one by one in
   Settings, and every tool call asks. Tested against scripted providers and a mock MCP server only.
 
+- Visual identity (`branding/`): the logo redrawn as a clean SVG (the generated icon had stray pixels around
+  the card), its PNG sizes, a monochrome and a symbol-only version, the README banner and the GitHub social
+  preview, and the art direction guide `branding/BRAND.md`. The logo is the application icon (launcher,
+  autostart entry, icon theme), the notification-area icon (embedded pixmaps), and is drawn in the popup,
+  the model picker and the settings page, whose accents now use the brand colours.
+
 ### Fixed (since the first popup)
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate

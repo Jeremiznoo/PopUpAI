@@ -48,7 +48,7 @@ fn entry(exec: &Path) -> String {
          Name=PopUpAI\n\
          Comment=Quick AI question popup (waits for its shortcut)\n\
          Exec={} --background\n\
-         Icon=dialog-question\n\
+         Icon=io.github.jeremiznoo.PopUpAI\n\
          Terminal=false\n\
          X-GNOME-Autostart-enabled=true\n",
         quote_exec(&exec.to_string_lossy())

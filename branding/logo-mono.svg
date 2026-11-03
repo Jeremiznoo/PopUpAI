@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="PopUpAI">
+  <path fill="none" stroke="#FFFFFF" stroke-width="40" stroke-linejoin="round" d="
+    M340 150 H684 A190 190 0 0 1 874 340 V650 A190 190 0 0 1 684 840
+    C704 872 732 900 764 910 C694 906 626 882 584 840
+    H340 A190 190 0 0 1 150 650 V340 A190 190 0 0 1 340 150 Z"/>
+  <rect x="337" y="318" width="54" height="392" rx="27" fill="#FFFFFF"/>
+  <path fill="#FFFFFF" stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round"
+        d="M611 388 C623 454 668 497 728 509 C668 521 623 564 611 630 C599 564 554 521 494 509 C554 497 599 454 611 388 Z"/>
+</svg>

@@ -5,7 +5,7 @@
 //! [`Command`]s, exactly as the shortcut and `popupai --toggle` do.
 
 use ksni::menu::StandardItem;
-use ksni::{Category, MenuItem, Tray, TrayMethods};
+use ksni::{Category, Icon, MenuItem, Tray, TrayMethods};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::ipc::{BUS_NAME, Command};
@@ -40,8 +40,23 @@ impl Tray for PopupTray {
         Category::ApplicationStatus
     }
 
-    fn icon_name(&self) -> String {
-        "dialog-question".to_owned()
+    /// The icon is drawn from embedded pixmaps rather than looked up by name, so it shows
+    /// the same whether or not the icon theme entry has been installed.
+    fn icon_pixmap(&self) -> Vec<Icon> {
+        const SIZES: [(i32, &[u8]); 4] = [
+            (22, include_bytes!("../assets/tray-22.argb")),
+            (32, include_bytes!("../assets/tray-32.argb")),
+            (48, include_bytes!("../assets/tray-48.argb")),
+            (64, include_bytes!("../assets/tray-64.argb")),
+        ];
+        SIZES
+            .iter()
+            .map(|(side, data)| Icon {
+                width: *side,
+                height: *side,
+                data: data.to_vec(),
+            })
+            .collect()
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
@@ -126,6 +141,22 @@ mod tests {
         drop(rx);
         let mut tray = PopupTray { commands: tx };
         tray.activate(0, 0);
+    }
+
+    #[test]
+    fn the_tray_icon_has_complete_pixmaps_in_several_sizes() {
+        let (tx, _rx) = unbounded_channel();
+        let icons = PopupTray { commands: tx }.icon_pixmap();
+        let sides: Vec<i32> = icons.iter().map(|i| i.width).collect();
+        assert_eq!(sides, [22, 32, 48, 64]);
+        for icon in &icons {
+            assert_eq!(icon.width, icon.height);
+            assert_eq!(icon.data.len(), (icon.width * icon.height * 4) as usize);
+            // ARGB: the corner of the square is transparent, the middle is not.
+            assert_eq!(icon.data[0], 0, "the corner is transparent");
+            let middle = ((icon.height / 2 * icon.width + icon.width / 2) * 4) as usize;
+            assert_eq!(icon.data[middle], 255, "the middle is opaque");
+        }
     }
 
     #[test]

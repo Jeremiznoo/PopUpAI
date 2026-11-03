@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="PopUpAI">
+  <!-- The card is a rounded square with a small tail at the bottom-right, where the popup lives. -->
+  <defs>
+    <linearGradient id="bubble" x1="150" y1="150" x2="870" y2="905" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B85CFF"/>
+      <stop offset="0.38" stop-color="#6B4BFA"/>
+      <stop offset="0.64" stop-color="#3A5BF5"/>
+      <stop offset="1" stop-color="#18D2FF"/>
+    </linearGradient>
+    <radialGradient id="gloss" cx="0.2" cy="0.12" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path id="card" fill="url(#bubble)" stroke="url(#bubble)" stroke-width="22" stroke-linejoin="round" d="
+    M340 150 H684 A190 190 0 0 1 874 340 V650 A190 190 0 0 1 684 840
+    C704 872 732 900 764 910 C694 906 626 882 584 840
+    H340 A190 190 0 0 1 150 650 V340 A190 190 0 0 1 340 150 Z"/>
+  <path fill="url(#gloss)" d="
+    M340 150 H684 A190 190 0 0 1 874 340 V650 A190 190 0 0 1 684 840
+    C704 872 732 900 764 910 C694 906 626 882 584 840
+    H340 A190 190 0 0 1 150 650 V340 A190 190 0 0 1 340 150 Z"/>
+  <!-- The text caret. -->
+  <rect x="337" y="318" width="54" height="392" rx="27" fill="#FCFCFD"/>
+  <!-- The four-point spark. -->
+  <path fill="#FCFCFD" stroke="#FCFCFD" stroke-width="16" stroke-linejoin="round"
+        d="M611 388 C623 454 668 497 728 509 C668 521 623 564 611 630 C599 564 554 521 494 509 C554 497 599 454 611 388 Z"/>
+</svg>
