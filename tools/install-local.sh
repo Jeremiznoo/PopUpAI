@@ -21,7 +21,10 @@ fi
 echo "Building the release binary..."
 cargo build --release -p popupai-app
 install -Dm755 target/release/popupai "$bin_dir/popupai"
+# The launcher gets the full path of the binary: a desktop session does not always have ~/.local/bin in its PATH,
+# and the shortcut that starts PopUpAI goes through this file.
 install -Dm644 "packaging/$desktop" "$apps_dir/$desktop"
+sed -i "s|^Exec=popupai |Exec=$bin_dir/popupai |" "$apps_dir/$desktop"
 # The icon, in every size of the hicolor theme plus the scalable one.
 icons_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 (cd packaging/icons && find hicolor -type f) | while read -r icon; do
