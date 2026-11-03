@@ -42,6 +42,8 @@ All notable changes are documented here. The format follows
 - Gemini reasoning parts (`thought: true`) are no longer mixed into the answer (from the
   vendor's documentation).
 
+- Real KWallet round trip run and passed (2026-11-03).
+
 ### Changed (since the first popup)
 
 - The popup is minimal: one field at the bottom, the answer growing above it, one dim

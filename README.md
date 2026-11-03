@@ -72,7 +72,7 @@ authentication error, which proved the endpoints and headers and found (and fixe
 Google reports a wrong key as HTTP 400. The streamed event formats of Anthropic and Google were
 also compared with the vendors' own documentation, which led to ignoring Google's `thought`
 parts. **Not verified:** a request with a *valid* key and the real streamed answers of the
-hosted services, and the wallet round trip, because they need your own key and your wallet. The model names above come from vendor
+hosted services, while the wallet round trip against KWallet passed on 2026-11-03 (they need your own key). The model names above come from vendor
 documentation. The first real use with your key is also the first real test: please report
 what you see.
 
