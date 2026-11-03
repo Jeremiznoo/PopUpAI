@@ -149,6 +149,9 @@ struct State {
     rejected_keys: HashSet<String>,
     /// A model picked in the popup, which wins over the provider's configured one.
     selected_model: Option<ModelRef>,
+    /// MCP servers the user switched on, and the connections already made to them.
+    mcp_servers: Vec<crate::mcp::McpServer>,
+    mcp_connections: HashMap<String, Arc<crate::mcp_client::McpConnection>>,
     /// Commands waiting for the user's answer, by tool call id.
     permissions: HashMap<String, tokio::sync::oneshot::Sender<bool>>,
 }
@@ -337,6 +340,8 @@ impl Orchestrator {
             rejected_keys: HashSet::new(),
             selected_model: None,
             permissions: HashMap::new(),
+            mcp_servers: Vec::new(),
+            mcp_connections: HashMap::new(),
         };
         let inner = Inner {
             state: Mutex::new(state),
@@ -570,6 +575,17 @@ impl Orchestrator {
     /// A copy of the settings in use.
     pub fn config(&self) -> Config {
         self.inner.state().config.clone()
+    }
+
+    /// The MCP servers the user has switched on. Their tools are offered to the model (every
+    /// call asks for approval). A server removed from the list is disconnected.
+    pub fn set_mcp_servers(&self, servers: Vec<crate::mcp::McpServer>) {
+        let mut state = self.inner.state();
+        let keep: HashSet<&str> = servers.iter().map(|s| s.id.as_str()).collect();
+        state
+            .mcp_connections
+            .retain(|id, _| keep.contains(id.as_str()));
+        state.mcp_servers = servers;
     }
 
     /// The user's answer to an [`Event::Permission`].
@@ -937,7 +953,8 @@ async fn agent_answer(
             AiRole::Assistant => AgentItem::Assistant(m.content.clone()),
         })
         .collect();
-    let spec = ToolSpec {
+    let mcp = connect_mcp(inner).await;
+    let mut specs = vec![ToolSpec {
         name: crate::tools::TOOL_NAME.to_owned(),
         description: "Run a shell command on the user's computer and get its output. Simple \
                       read-only commands run at once; any other command is shown to the user, who \
@@ -950,7 +967,12 @@ async fn agent_answer(
             },
             "required": ["command"],
         }),
-    };
+    }];
+    specs.extend(mcp.iter().map(|entry| ToolSpec {
+        name: entry.full_name.clone(),
+        description: format!("[MCP server {}] {}", entry.server, entry.tool.description),
+        parameters: entry.tool.schema.clone(),
+    }));
     let mut bytes = 0usize;
     for _ in 0..MAX_AGENT_STEPS {
         let mut stream = provider
@@ -958,7 +980,7 @@ async fn agent_answer(
                 model: job.request.model.clone(),
                 instructions: instructions.clone(),
                 items: items.clone(),
-                tools: vec![spec.clone()],
+                tools: specs.clone(),
             })
             .await?;
         let (mut call, mut echoed) = (None, Vec::new());
@@ -980,7 +1002,7 @@ async fn agent_answer(
             tracing::info!(provider = %job.entry.id, bytes, "request finished");
             return Ok(());
         };
-        let Some(output) = run_tool_call(inner, id, &call).await else {
+        let Some(output) = run_tool_call(inner, id, &call, &mcp).await else {
             return Ok(()); // the session was stopped meanwhile
         };
         items.extend(echoed.into_iter().map(AgentItem::Raw));
@@ -997,47 +1019,151 @@ async fn agent_answer(
     Ok(())
 }
 
-/// Run what the model asked for, after the user's approval when the command is not a plain
-/// read. Returns the text to give back to the model, or `None` if the answer was stopped.
-async fn run_tool_call(inner: &Arc<Inner>, id: SessionId, call: &ToolCall) -> Option<String> {
-    let command = (call.name == crate::tools::TOOL_NAME)
-        .then(|| serde_json::from_str::<serde_json::Value>(&call.arguments).ok())
-        .flatten()
-        .and_then(|v| {
-            v.get("command")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-        });
-    let Some(command) = command else {
-        return Some("error: unknown tool or missing `command` argument".to_owned());
+/// A tool of an MCP server, as offered to the model.
+struct McpEntry {
+    server: String,
+    full_name: String,
+    tool: crate::mcp_client::McpTool,
+    connection: Arc<crate::mcp_client::McpConnection>,
+}
+
+const MAX_MCP_TOOLS: usize = 40;
+
+/// The name the model sees: `mcp__server__tool`, limited to what tool names allow.
+fn mcp_tool_name(server: &str, tool: &str) -> String {
+    let clean = |s: &str| -> String {
+        s.chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect()
     };
-    // The command is shown in the answer, so the user always sees what ran.
-    if !inner.deliver(id, format!("\n\n`$ {}`\n\n", command.replace('`', "'"))) {
-        return None;
-    }
-    if let crate::tools::Decision::Ask(reason) = crate::tools::classify(&command) {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        inner.state().permissions.insert(call.call_id.clone(), tx);
-        inner.emit(Event::Permission {
-            session: id,
-            call_id: call.call_id.clone(),
-            command: command.clone(),
-            reason,
-        });
-        let allowed = tokio::time::timeout(PERMISSION_WAIT, rx)
-            .await
-            .is_ok_and(|answer| answer.unwrap_or(false));
-        inner.state().permissions.remove(&call.call_id);
-        if !allowed {
-            tracing::info!("a command was not approved");
-            if !inner.deliver(id, "*(not run)*\n\n".to_owned()) {
-                return None;
+    let mut name = format!("mcp__{}__{}", clean(server), clean(tool));
+    name.truncate(64);
+    name
+}
+
+/// Connect to the servers the user switched on, starting the ones not running yet. A server that
+/// cannot be started is skipped (and noted in the log): it must not stop the answer.
+async fn connect_mcp(inner: &Arc<Inner>) -> Vec<McpEntry> {
+    let servers = inner.state().mcp_servers.clone();
+    let mut entries = Vec::new();
+    for server in servers {
+        let cached = inner.state().mcp_connections.get(&server.id).cloned();
+        let connection = match cached {
+            Some(connection) => connection,
+            None => match crate::mcp_client::McpConnection::start(&server).await {
+                Ok(connection) => {
+                    let connection = Arc::new(connection);
+                    inner
+                        .state()
+                        .mcp_connections
+                        .insert(server.id.clone(), connection.clone());
+                    connection
+                }
+                Err(_) => {
+                    tracing::warn!(server = %server.id, "an MCP server could not be started");
+                    continue;
+                }
+            },
+        };
+        for tool in &connection.tools {
+            if entries.len() >= MAX_MCP_TOOLS {
+                break;
             }
-            return Some("The user declined to run this command. Do not retry it; answer without it or suggest what they could run themselves.".to_owned());
+            entries.push(McpEntry {
+                server: server.name.clone(),
+                full_name: mcp_tool_name(&server.name, &tool.name),
+                tool: tool.clone(),
+                connection: connection.clone(),
+            });
         }
     }
-    tracing::info!("a command was run");
-    Some(crate::tools::run(&command).await)
+    entries
+}
+
+/// Put a command to the user and wait for the answer. `None` if the answer was stopped.
+async fn ask_user(
+    inner: &Arc<Inner>,
+    id: SessionId,
+    call_id: &str,
+    command: String,
+    reason: String,
+) -> Option<bool> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    inner.state().permissions.insert(call_id.to_owned(), tx);
+    inner.emit(Event::Permission {
+        session: id,
+        call_id: call_id.to_owned(),
+        command,
+        reason,
+    });
+    let allowed = tokio::time::timeout(PERMISSION_WAIT, rx)
+        .await
+        .is_ok_and(|answer| answer.unwrap_or(false));
+    inner.state().permissions.remove(call_id);
+    if !allowed && !inner.deliver(id, "*(not run)*\n\n".to_owned()) {
+        return None;
+    }
+    Some(allowed)
+}
+
+const DECLINED: &str = "The user declined to run this. Do not retry it; answer without it or suggest what they could do themselves.";
+
+/// Run what the model asked for, after the user's approval when it is not a plain read.
+/// Returns the text to give back to the model, or `None` if the answer was stopped.
+async fn run_tool_call(
+    inner: &Arc<Inner>,
+    id: SessionId,
+    call: &ToolCall,
+    mcp: &[McpEntry],
+) -> Option<String> {
+    let arguments = serde_json::from_str::<serde_json::Value>(&call.arguments).ok();
+    if call.name == crate::tools::TOOL_NAME {
+        let command = arguments
+            .as_ref()
+            .and_then(|v| v.get("command"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        let Some(command) = command else {
+            return Some("error: the `command` argument is missing".to_owned());
+        };
+        // The command is shown in the answer, so the user always sees what ran.
+        if !inner.deliver(id, format!("\n\n`$ {}`\n\n", command.replace('`', "'"))) {
+            return None;
+        }
+        if let crate::tools::Decision::Ask(reason) = crate::tools::classify(&command)
+            && !ask_user(inner, id, &call.call_id, command.clone(), reason).await?
+        {
+            tracing::info!("a command was not approved");
+            return Some(DECLINED.to_owned());
+        }
+        tracing::info!("a command was run");
+        return Some(crate::tools::run(&command).await);
+    }
+    let Some(entry) = mcp.iter().find(|e| e.full_name == call.name) else {
+        return Some("error: unknown tool".to_owned());
+    };
+    let arguments = arguments
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    let mut shown = format!("{}: {}({})", entry.server, entry.tool.name, arguments);
+    shown.truncate(shown.floor_char_boundary(400));
+    if !inner.deliver(id, format!("\n\n`{}`\n\n", shown.replace('`', "'"))) {
+        return None;
+    }
+    // Every MCP call asks first: the server is another program, and the arguments are the model's.
+    let reason = format!("calls a tool of the MCP server \"{}\"", entry.server);
+    if !ask_user(inner, id, &call.call_id, shown, reason).await? {
+        tracing::info!("an MCP call was not approved");
+        return Some(DECLINED.to_owned());
+    }
+    tracing::info!("an MCP tool was called");
+    Some(entry.connection.call(&entry.tool.name, arguments).await)
 }
 
 /// The cached provider, or a new one built with the key from the secret store.
@@ -2215,5 +2341,64 @@ mod tests {
             panic!("the plain chat path is expected");
         };
         assert!(fake.requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_mcp_tool_is_offered_and_every_call_asks_first() {
+        let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/support/mock_mcp.py");
+        let server = crate::mcp::McpServer {
+            id: "test/mock".into(),
+            name: "mock".into(),
+            source: "test",
+            command: "python3".into(),
+            args: vec!["-I".into(), script.into()],
+            env: std::collections::BTreeMap::new(),
+        };
+        let (orch, mut events, fake) = agent_harness(vec![
+            vec![call_tool("c1", "mcp__mock__echo", r#"{"text":"hi"}"#)],
+            vec![AgentEvent::Text("Done.".into())],
+        ]);
+        orch.set_mcp_servers(vec![server]);
+        orch.open();
+        orch.submit("use the tool").unwrap();
+        let command = loop {
+            match next(&mut events).await {
+                Event::Permission {
+                    call_id,
+                    command,
+                    reason,
+                    ..
+                } => {
+                    assert!(reason.contains("MCP server"), "{reason}");
+                    orch.answer_permission(&call_id, true);
+                    break command;
+                }
+                Event::Chunk { .. } => {}
+                other => panic!("unexpected {other:?}"),
+            }
+        };
+        assert!(command.starts_with("mock: echo("), "{command}");
+        collect_until_finished(&mut events).await;
+        let requests = fake.requests.lock().unwrap();
+        let names: Vec<&str> = requests[0].tools.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, ["run_command", "mcp__mock__echo"]);
+        let AgentItem::Output { output, .. } = requests[1].items.last().unwrap() else {
+            panic!("the tool result goes back");
+        };
+        assert_eq!(output, "echo: hi");
+    }
+
+    fn call_tool(id: &str, name: &str, arguments: &str) -> AgentEvent {
+        AgentEvent::Call(ToolCall {
+            call_id: id.into(),
+            name: name.into(),
+            arguments: arguments.into(),
+        })
+    }
+
+    #[test]
+    fn mcp_tool_names_are_clean_and_bounded() {
+        assert_eq!(mcp_tool_name("my server", "do.it"), "mcp__my_server__do_it");
+        assert!(mcp_tool_name(&"s".repeat(80), "t").len() <= 64);
     }
 }

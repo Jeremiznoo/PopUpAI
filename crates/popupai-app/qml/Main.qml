@@ -110,6 +110,8 @@ Window {
         if (row.kind === "provider") {
             controller.connectProvider(row.id)
             closeSettings()
+        } else if (row.kind === "mcp") {
+            controller.toggleMcp(row.id)
         } else if (row.kind === "autostart") {
             controller.toggleAutostart()
         } else if (row.kind === "shortcut") {

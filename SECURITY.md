@@ -38,6 +38,19 @@ The full threat table is in
 - **Privacy:** no telemetry, analytics, screenshots or clipboard reads. History is
   off by default.
 
+## Commands and MCP
+
+- A command from the model runs without asking only if it is one simple read-only program on a
+  non-sensitive place; anything else is shown in full and waits for the user's Enter. No answer is a
+  refusal. The classifier is narrow on purpose and is tested on hostile inputs; it is still a
+  heuristic, and what a read-only command prints is sent to the provider as the answer to the model,
+  so the places that can hold credentials are excluded and recursive text searches ask.
+- A prompt-injected instruction in a file or page the model reads can at most make it *ask*: it cannot
+  run anything but plain reads without the user's approval.
+- MCP servers found in other applications' configuration are read-only data until the user switches
+  one on. Starting one runs the program from that configuration with its own environment; every tool
+  call asks first. Secrets in their environment or arguments are never displayed, logged or sent.
+
 ## ChatGPT sign-in
 
 - The device-code flow means the password never reaches PopUpAI. The access and refresh

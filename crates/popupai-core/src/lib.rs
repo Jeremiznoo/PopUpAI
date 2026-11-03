@@ -6,6 +6,8 @@
 pub mod config;
 pub mod credentials;
 pub mod markdown;
+pub mod mcp;
+pub mod mcp_client;
 pub mod orchestrator;
 pub mod request_error;
 pub mod session;

@@ -52,6 +52,10 @@ All notable changes are documented here. The format follows
 - The model is told which system it runs on (distribution and version, kernel, architecture, desktop,
   shell, language, date) unless `advanced.share_system_info` is false. No identity or file data.
 
+- The model can run commands: plain reads at once, everything else after the user's Enter; MCP servers
+  already configured by other applications are detected (read-only), switched on one by one in
+  Settings, and every tool call asks. Tested against scripted providers and a mock MCP server only.
+
 ### Fixed (since the first popup)
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate

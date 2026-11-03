@@ -95,6 +95,27 @@ what you see.
 
 If a stored key is refused, the popup shows the key field again so you can paste a new one.
 
+## Commands and MCP servers
+
+With a provider that supports tools (the ChatGPT account, for now) the model can run commands on
+your computer, and call the tools of MCP servers you switched on.
+
+- **Plain reads run at once:** one program from a short list (`ls`, `cat`, `find` without `-exec`,
+  `uname`, `df`, ...), no pipe, redirection, substitution or chaining, and nothing that names keys,
+  credentials, browser data or this application's own files. The command is shown in the answer.
+- **Everything else asks:** the popup shows the full command and why it asks; **Enter** runs it, **Esc**
+  refuses, and no answer within two minutes refuses. A refusal is told to the model.
+- **Limits:** 30 seconds and 16 KiB of output per command, and at most 8 steps per answer.
+- **MCP:** the servers already configured by Claude Desktop, Claude Code, Cursor, VS Code and opencode
+  are found (read-only) and listed in Settings, all **off**. A server is a program: it is started only
+  after you switch it on there, and every call of its tools asks for your approval. Environment values
+  and credentials in their arguments are never shown, logged or sent to the model.
+- Turn commands off with `allow_commands = false` under `[advanced]`.
+
+**Not verified:** this was tested against scripted providers and a small mock MCP server only. The real
+ChatGPT backend's tool calling and a real MCP server (such as the one found on your machine) have not
+been run through it.
+
 ## The model knows your system
 
 With each request PopUpAI tells the model which system it is on, so its commands fit: the

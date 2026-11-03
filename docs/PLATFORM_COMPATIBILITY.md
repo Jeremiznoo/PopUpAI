@@ -23,6 +23,10 @@ exercised · ⬜ planned, not started · ❌ not supported.
 scripted server (5 end-to-end tests, 8 unit tests). **Never run against OpenAI.** Its headers,
 accepted models and the `gpt-6-luna` default for it are unverified.
 
+**Commands and MCP:** the command classifier (10 tests on hostile inputs), the agent loop (5 tests against
+scripted providers), and the MCP client against a small real MCP server over pipes (3 tests). **Not run**
+against the ChatGPT backend's real tool calling, nor against the real MCP server found on this machine.
+
 ## Spike log
 
 Observations from [spikes/s1-layer-shell](../spikes/s1-layer-shell/README.md), on KDE

@@ -75,6 +75,11 @@ pub mod qobject {
         #[cxx_name = "answerPermission"]
         fn answer_permission(self: Pin<&mut PopupController>, allow: bool);
 
+        /// Switch an MCP server found on this computer on or off.
+        #[qinvokable]
+        #[cxx_name = "toggleMcp"]
+        fn toggle_mcp(self: Pin<&mut PopupController>, server: &QString);
+
         /// Fill `settingsJson` with the rows of the settings page.
         #[qinvokable]
         #[cxx_name = "loadSettings"]
@@ -144,6 +149,7 @@ use zeroize::Zeroizing;
 
 use crate::context;
 use crate::key_input;
+use crate::mcp_setup;
 use crate::picker;
 use crate::settings_page;
 use crate::shortcut_notice;
@@ -387,6 +393,25 @@ impl qobject::PopupController {
         }
     }
 
+    fn toggle_mcp(self: Pin<&mut Self>, server: &QString) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let (id, path) = (server.to_string(), app.state_path.clone());
+        let orchestrator = app.orchestrator.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn_blocking(move || {
+            let mut state = UserState::load(&path);
+            let on = state.toggle_mcp(&id);
+            if let Err(err) = state.save(&path) {
+                tracing::warn!("could not save the MCP choice: {err}");
+            }
+            orchestrator.set_mcp_servers(mcp_setup::enabled(&mcp_setup::detect(), &state));
+            tracing::info!(enabled = on, "an MCP server was switched");
+            let _ = qt_thread.queue(|controller| controller.load_settings());
+        });
+    }
+
     fn answer_permission(mut self: Pin<&mut Self>, allow: bool) {
         let Some(app) = context::get() else {
             return;
@@ -528,11 +553,22 @@ impl qobject::PopupController {
             return;
         };
         let orchestrator = app.orchestrator.clone();
+        let state_path = app.state_path.clone();
         let qt_thread = self.qt_thread();
         app.runtime.spawn(async move {
             let status = orchestrator.connection_status().await;
             let autostart = Autostart::user().map(|a| a.is_enabled());
-            let json = settings_page::to_json(&settings_page::build(&status, autostart));
+            // Found each time the page opens, so a server added since shows up. Read-only.
+            let state = UserState::load(&state_path);
+            let found = mcp_setup::detect();
+            let mcp: Vec<_> = found
+                .into_iter()
+                .map(|server| {
+                    let on = state.mcp_enabled.contains(&server.id);
+                    (server, on)
+                })
+                .collect();
+            let json = settings_page::to_json(&settings_page::build(&status, &mcp, autostart));
             let _ = qt_thread.queue(move |mut controller| {
                 controller
                     .as_mut()

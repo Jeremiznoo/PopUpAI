@@ -3,6 +3,7 @@ mod config_path;
 mod context;
 mod controller;
 mod key_input;
+mod mcp_setup;
 mod picker;
 mod settings_page;
 mod shortcut_notice;
@@ -240,6 +241,11 @@ fn main() -> ExitCode {
         orchestrator.select_model(&last.provider, &last.model);
     }
     runtime.block_on(orchestrator.auto_select());
+    // Only the MCP servers the user switched on are ever started.
+    orchestrator.set_mcp_servers(mcp_setup::enabled(
+        &mcp_setup::detect(),
+        &popupai_core::state::UserState::load(&state_path),
+    ));
     tracing::info!(
         provider = orchestrator
             .current_provider()

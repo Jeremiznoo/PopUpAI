@@ -34,6 +34,8 @@ pub struct UserState {
     pub favorites: Vec<ModelRef>,
     /// Most recent first.
     pub recent: Vec<ModelRef>,
+    /// Ids of the MCP servers the user switched on (`source/name`).
+    pub mcp_enabled: Vec<String>,
 }
 
 impl UserState {
@@ -48,6 +50,19 @@ impl UserState {
             false
         } else if self.favorites.len() < MAX_FAVORITES {
             self.favorites.push(model.clone());
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Returns whether the server is now switched on.
+    pub fn toggle_mcp(&mut self, id: &str) -> bool {
+        if let Some(at) = self.mcp_enabled.iter().position(|s| s == id) {
+            self.mcp_enabled.remove(at);
+            false
+        } else if self.mcp_enabled.len() < 32 && id.len() <= 200 {
+            self.mcp_enabled.push(id.to_owned());
             true
         } else {
             false
@@ -104,6 +119,16 @@ mod tests {
 
     fn m(provider: &str, model: &str) -> ModelRef {
         ModelRef::new(provider, model)
+    }
+
+    #[test]
+    fn an_mcp_server_is_off_until_switched_on() {
+        let mut state = UserState::default();
+        assert!(state.mcp_enabled.is_empty());
+        assert!(state.toggle_mcp("Cursor/files"));
+        assert_eq!(state.mcp_enabled, ["Cursor/files"]);
+        assert!(!state.toggle_mcp("Cursor/files"));
+        assert!(state.mcp_enabled.is_empty());
     }
 
     #[test]

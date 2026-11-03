@@ -1,5 +1,6 @@
 //! The rows of the settings page, built without Qt so their wording and order can be tested.
 
+use popupai_core::mcp::McpServer;
 use popupai_core::orchestrator::ConnectionStatus;
 use serde::Serialize;
 
@@ -16,8 +17,13 @@ pub struct Row {
     pub removable: bool,
 }
 
-/// `autostart` is `None` when the desktop has no autostart folder to use.
-pub fn build(status: &[ConnectionStatus], autostart: Option<bool>) -> Vec<Row> {
+/// `autostart` is `None` when the desktop has no autostart folder to use. `mcp` lists the
+/// servers found on the computer, with whether the user switched each one on.
+pub fn build(
+    status: &[ConnectionStatus],
+    mcp: &[(McpServer, bool)],
+    autostart: Option<bool>,
+) -> Vec<Row> {
     let mut rows: Vec<Row> = status
         .iter()
         .map(|s| {
@@ -38,6 +44,22 @@ pub fn build(status: &[ConnectionStatus], autostart: Option<bool>) -> Vec<Row> {
             }
         })
         .collect();
+    rows.extend(mcp.iter().map(|(server, enabled)| Row {
+        kind: "mcp",
+        group: "MCP servers found on this computer",
+        id: server.id.clone(),
+        title: format!("{} \u{b7} {}", server.name, server.source),
+        detail: format!(
+            "{} \u{b7} {}",
+            if *enabled {
+                "On"
+            } else {
+                "Off, press Enter to turn on"
+            },
+            server.summary()
+        ),
+        removable: false,
+    }));
     rows.push(Row {
         kind: "autostart",
         group: "General",
@@ -90,6 +112,7 @@ mod tests {
                 status("chatgpt2", true, true, true),
                 status("ollama", false, false, true),
             ],
+            &[],
             Some(false),
         );
         let details: Vec<&str> = rows.iter().take(5).map(|r| r.detail.as_str()).collect();
@@ -113,6 +136,7 @@ mod tests {
                 status("b", true, false, false),
                 status("o", false, false, true),
             ],
+            &[],
             None,
         );
         let removable: Vec<bool> = rows.iter().take(3).map(|r| r.removable).collect();
@@ -121,19 +145,41 @@ mod tests {
 
     #[test]
     fn the_general_rows_follow_the_connections() {
-        let rows = build(&[status("a", true, false, true)], Some(true));
+        let rows = build(&[status("a", true, false, true)], &[], Some(true));
         let kinds: Vec<&str> = rows.iter().map(|r| r.kind).collect();
         assert_eq!(kinds, ["provider", "autostart", "shortcut"]);
         assert!(rows[1].detail.starts_with("On"));
-        assert!(build(&[], None)[0].detail.contains("Not available"));
+        assert!(build(&[], &[], None)[0].detail.contains("Not available"));
     }
 
     #[test]
     fn the_json_carries_what_the_interface_reads() {
-        let json = to_json(&build(&[status("a", true, false, true)], Some(false)));
+        let json = to_json(&build(&[status("a", true, false, true)], &[], Some(false)));
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         for key in ["kind", "group", "id", "title", "detail", "removable"] {
             assert!(parsed[0].get(key).is_some(), "{key} in {json}");
         }
+    }
+
+    #[test]
+    fn found_mcp_servers_are_listed_off_by_default_without_their_environment() {
+        let server = McpServer {
+            id: "Cursor/files".into(),
+            name: "files".into(),
+            source: "Cursor",
+            command: "npx".into(),
+            args: vec!["-y".into(), "srv".into()],
+            env: [("API_KEY".to_owned(), "sk-secret".to_owned())].into(),
+        };
+        let rows = build(&[], &[(server.clone(), false), (server, true)], None);
+        assert_eq!(rows[0].kind, "mcp");
+        assert!(rows[0].detail.starts_with("Off"), "{}", rows[0].detail);
+        assert!(rows[1].detail.starts_with("On"), "{}", rows[1].detail);
+        let json = to_json(&rows);
+        assert!(
+            !json.contains("sk-secret") && !json.contains("API_KEY"),
+            "{json}"
+        );
+        assert!(rows[0].detail.contains("npx -y srv"));
     }
 }
