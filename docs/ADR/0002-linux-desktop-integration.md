@@ -81,6 +81,21 @@ Things the spike must establish:
 - What the portal reports on a conflict, and whether the user's final trigger
   differs from the preferred one.
 
+**Findings from the real session (2026-11-02, Plasma 6.8.2).**
+
+- An unsandboxed binary **does** need an installed launcher file named after the
+  application id (`io.github.jeremiznoo.PopUpAI.desktop`). Without it the portal answers
+  `NotAllowed: An app id is required` / `App info not found`, even though the application
+  registered its id through `org.freedesktop.host.portal.Registry`.
+- With the file installed, KDE accepts `BindShortcuts`, creates the component in
+  `kglobalshortcutsrc`, and stores the requested trigger as the **default key with no
+  active key**. The trigger is not applied on its own: the user has to assign it. The first
+  bind waited for a KDE window; later binds answered at once.
+- `ConfigureShortcuts` (portal v2) opens KDE's own window for that; the popup offers it
+  as *Set the shortcut…* whenever the key is unassigned.
+- The binding persists across restarts (the entry is still there, and a later bind returned
+  immediately). Conflict behaviour was not exercised.
+
 *No silent fallback.* If registration fails the app says so (tray notice and
 popup banner) and points to the supported manual route below.
 

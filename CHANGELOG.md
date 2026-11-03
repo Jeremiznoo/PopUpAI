@@ -24,6 +24,10 @@ All notable changes are documented here. The format follows
 - Masked API key entry in the popup, handed straight to the secret store.
 - Sanitised Markdown rendering of answers: a whitelist of tags with no attribute, no
   image, no link, raw HTML escaped.
+- *Set the shortcut…* in the popup, which opens the desktop's shortcut settings through the
+  portal when KDE leaves the requested key unassigned (observed on Plasma 6.8.2).
+- Guided real-session run `tools/try-real.sh` and ignored live tests against a real local
+  Ollama (`llama3.2:1b`), both run on 2026-11-02.
 - Notification-area icon (StatusNotifierItem), autostart entry driven by
   `launch_at_startup`, desktop file and a per-user install script. Binary renamed `popupai`.
 

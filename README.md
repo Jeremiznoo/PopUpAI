@@ -33,7 +33,10 @@ closes it; the next opening is a fresh session. **Ctrl+P** (or a click on the di
 under the field) switches provider, **Stop** or **Ctrl+.** cancels an answer, **Copy**
 copies it.
 
-Without a working global shortcut (the popup says so), bind the command
+The global shortcut needs the launcher file installed (see *Install for your user* below):
+the desktop portal refuses an application it cannot identify. On KDE the key is then
+assigned by you: if the popup says *no key assigned*, click *Set the shortcut…* and set it
+in the window KDE opens. Without a working global shortcut (the popup says so), bind the command
 `popupai --toggle` in *System Settings, Shortcuts*. Settings live in
 `~/.config/popupai/config.toml` (created with mode 0600); there is no settings window yet.
 
