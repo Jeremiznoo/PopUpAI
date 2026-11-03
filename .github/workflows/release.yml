@@ -40,4 +40,7 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "PopUpAI $GITHUB_REF_NAME" --generate-notes --prerelease
+        run: |
+          # The artifact keeps the RPMS/x86_64 folder: upload the files, not the folders.
+          gh release create "$GITHUB_REF_NAME" $(find dist -type f \( -name '*.rpm' -o -name '*.deb' \)) \
+            --repo "$GITHUB_REPOSITORY" --title "PopUpAI $GITHUB_REF_NAME" --generate-notes --prerelease
