@@ -32,3 +32,5 @@ secrets/
 
 # QML language-server config, generated per machine
 .qmlls.ini
+release/*
+!release/README.md

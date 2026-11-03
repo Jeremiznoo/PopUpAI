@@ -11,7 +11,7 @@ members = [
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
-# Not publishable until a license is chosen (see README).
+license = "MIT"
 publish = false
 
 [workspace.dependencies]

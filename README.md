@@ -112,4 +112,4 @@ Native on Fedora 44 with KDE Plasma (Wayland); the dependencies are listed in
 
 ## License
 
-Not chosen yet.
+[MIT](LICENSE).

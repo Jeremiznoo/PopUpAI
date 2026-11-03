@@ -1,0 +1,65 @@
+# Builds the Fedora (.rpm) and Debian (.deb) packages and attaches them to a GitHub release when a version tag
+# is pushed (git tag v0.1.0 && git push origin v0.1.0). Each package is built in the distribution it targets,
+# because a binary built on one distribution does not run on another (different Qt and libc).
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - run: dnf install -y git rpm-build rust cargo gcc-c++ cmake qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils
+      - uses: actions/checkout@v4
+      - name: Source tarball and build
+        run: |
+          git config --global --add safe.directory "$PWD"
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p ~/rpmbuild/SOURCES
+          git archive --format=tar.gz --prefix="popupai-${version}/" -o ~/rpmbuild/SOURCES/popupai-${version}.tar.gz HEAD
+          sed -i "s/^Version:.*/Version:        ${version}/" packaging/rpm/popupai.spec
+          rpmbuild -ba packaging/rpm/popupai.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm
+          path: ~/rpmbuild/RPMS/*/*.rpm
+
+  deb:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git build-essential cmake pkg-config curl ca-certificates debhelper \
+            fakeroot dpkg-dev qt6-base-dev qt6-declarative-dev libgl-dev
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cp -r packaging/debian debian
+          sed -i "1s/.*/popupai (${version}) unstable; urgency=medium/" debian/changelog
+          export PATH="$HOME/.cargo/bin:$PATH"
+          dpkg-buildpackage -us -uc -b
+          mkdir -p out && mv ../popupai_*.deb out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: out/*.deb
+
+  publish:
+    needs: [rpm, deb]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "PopUpAI $GITHUB_REF_NAME" --generate-notes --prerelease

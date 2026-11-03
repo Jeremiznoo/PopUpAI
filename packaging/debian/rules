@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+# The Rust toolchain is installed with rustup by the release workflow: the one in Debian stable is too old
+# for this code (edition 2024, let-chains). Crates are fetched from the network, locked by Cargo.lock.
+export CARGO_HOME := $(CURDIR)/debian/.cargo-home
+export PATH := $(HOME)/.cargo/bin:$(PATH)
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release --locked -p popupai-app
+
+override_dh_auto_install:
+	install -Dm755 target/release/popupai debian/popupai/usr/bin/popupai
+	install -Dm644 packaging/io.github.jeremiznoo.PopUpAI.desktop debian/popupai/usr/share/applications/io.github.jeremiznoo.PopUpAI.desktop
+	mkdir -p debian/popupai/usr/share/icons
+	cp -a packaging/icons/hicolor debian/popupai/usr/share/icons/
+
+override_dh_auto_test:
+	:
+
+override_dh_dwz override_dh_strip:
+	:

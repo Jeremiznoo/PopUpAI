@@ -68,6 +68,10 @@ All notable changes are documented here. The format follows
   GNOME or XFCE after asking, and prints a line for other desktops. The popup is placed for X11 and frameless
   on Wayland without layer-shell. Everything is keyboard only.
 
+- MIT license, and the packaging for a release: Fedora spec, Debian packaging, an AUR `PKGBUILD` and a workflow that builds
+  the `.rpm` and `.deb` in their own distribution when a version tag is pushed. **Nothing has been built or run yet**
+  (see `docs/RELEASING.md`).
+
 ### Fixed (since the first popup)
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate

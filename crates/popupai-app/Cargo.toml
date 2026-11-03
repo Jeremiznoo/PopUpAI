@@ -4,6 +4,7 @@ description = "PopUpAI desktop application: the Qt/QML popup connected to the Ru
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 # The cxx-qt bridge expands to unsafe code, so this crate cannot use the
 # workspace-wide `forbid(unsafe_code)`. Unsafe code is only allowed on the bridge

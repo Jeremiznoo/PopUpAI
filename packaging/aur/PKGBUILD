@@ -1,0 +1,39 @@
+# Maintainer: jeremiznoo <diaz.jeremy@protonmail.com>
+#
+# Not usable until the GitHub repository is public (the source is the tag's tarball) and the package is
+# pushed to ssh://aur@aur.archlinux.org/popupai.git by its maintainer. Not built on Arch yet:
+# the dependency list below comes from the Fedora build and must be confirmed by a first `makepkg`.
+pkgname=popupai
+pkgver=0.0.1
+pkgrel=1
+pkgdesc='Quick-ask AI popup with a global shortcut (ChatGPT account, API keys or local models)'
+arch=('x86_64')
+url='https://github.com/Jeremiznoo/PopUpAI'
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'layer-shell-qt' 'hicolor-icon-theme')
+optdepends=('xdg-desktop-portal: global shortcut registration for the resident mode'
+            'gnome-keyring: secret store for API keys'
+            'kwallet: secret store for API keys')
+makedepends=('rust' 'cargo' 'cmake' 'gcc')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "PopUpAI-$pkgver"
+  cargo fetch --locked
+}
+
+build() {
+  cd "PopUpAI-$pkgver"
+  cargo build --release --locked -p popupai-app
+}
+
+package() {
+  cd "PopUpAI-$pkgver"
+  install -Dm755 target/release/popupai "$pkgdir/usr/bin/popupai"
+  install -Dm644 packaging/io.github.jeremiznoo.PopUpAI.desktop \
+    "$pkgdir/usr/share/applications/io.github.jeremiznoo.PopUpAI.desktop"
+  install -dm755 "$pkgdir/usr/share/icons"
+  cp -a packaging/icons/hicolor "$pkgdir/usr/share/icons/"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
