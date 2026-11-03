@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Effects
 import org.kde.layershell 1.0 as LayerShell
 import io.github.jeremiznoo.popupai
 
@@ -21,10 +22,12 @@ Window {
     readonly property int answerWidth: Math.min(640, 440 + Math.round(controller.answer.length * 0.25))
 
     visible: false
-    width: pickerOpen ? 520 : answerWidth
+    // The window is 14 px larger than the card on every side, which is where the shadow lives.
+    readonly property int shadowMargin: 14
+    width: (pickerOpen ? 520 : answerWidth) + 2 * shadowMargin
     // The input stays at the bottom edge and the answer grows above it, so the field
     // does not move while an answer streams in.
-    height: pickerOpen ? 400 : Math.min(maxHeight, content.implicitHeight + 24)
+    height: (pickerOpen ? 400 : Math.min(maxHeight, content.implicitHeight + 24)) + 2 * shadowMargin
     Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
     color: "transparent"
     title: "PopUpAI"
@@ -34,8 +37,8 @@ Window {
     LayerShell.Window.scope: "popupai"
     LayerShell.Window.layer: LayerShell.Window.LayerOverlay
     LayerShell.Window.anchors: LayerShell.Window.AnchorBottom | LayerShell.Window.AnchorRight
-    LayerShell.Window.margins.right: 16
-    LayerShell.Window.margins.bottom: 16
+    LayerShell.Window.margins.right: 4
+    LayerShell.Window.margins.bottom: 4
     LayerShell.Window.exclusionZone: 0
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
 
@@ -93,6 +96,7 @@ Window {
         keyInput.text = ""
         wasActive = false
         visible = true
+        appear.restart()
         focusField()
     }
 
@@ -234,13 +238,42 @@ Window {
         }
     }
 
+    // Soft shadow under the card.
+    Rectangle {
+        id: shadowSource
+        anchors.fill: panel
+        radius: panel.radius
+        color: "black"
+        visible: false
+    }
+    MultiEffect {
+        anchors.fill: panel
+        source: shadowSource
+        shadowEnabled: true
+        shadowColor: "black"
+        shadowOpacity: 0.38
+        shadowBlur: 1.0
+        shadowVerticalOffset: 6
+        opacity: panel.opacity
+        scale: panel.scale
+    }
+
     Rectangle {
         id: panel
         anchors.fill: parent
-        radius: 12
-        color: palette.window
-        border.color: Qt.alpha(palette.windowText, 0.18)
+        anchors.margins: popup.shadowMargin
+        radius: 18
+        color: Qt.alpha(palette.window, 0.97)
+        border.color: Qt.alpha(palette.windowText, 0.12)
         border.width: 1
+        transformOrigin: Item.BottomRight
+
+        // The card fades and settles in when the popup opens.
+        ParallelAnimation {
+            id: appear
+            NumberAnimation { target: panel; property: "opacity"; from: 0; to: 1; duration: 140 }
+            NumberAnimation { target: panel; property: "scale"; from: 0.965; to: 1; duration: 180; easing.type: Easing.OutCubic }
+        }
 
         Column {
             id: content
@@ -280,18 +313,32 @@ Window {
                 color: Qt.alpha(palette.windowText, 0.6)
             }
 
-            Text {
+            Row {
                 id: thinking
                 visible: controller.status === "streaming" && controller.answer.length === 0
-                text: "…"
-                font.pixelSize: 16
-                color: Qt.alpha(palette.windowText, 0.6)
+                spacing: 5
+                height: 14
 
-                SequentialAnimation on opacity {
-                    running: thinking.visible
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1.0; to: 0.25; duration: 600 }
-                    NumberAnimation { from: 0.25; to: 1.0; duration: 600 }
+                Repeater {
+                    model: 3
+                    Rectangle {
+                        required property int index
+                        width: 7
+                        height: 7
+                        radius: 3.5
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: palette.highlight
+                        opacity: 0.25
+
+                        SequentialAnimation on opacity {
+                            running: thinking.visible
+                            loops: Animation.Infinite
+                            PauseAnimation { duration: index * 160 }
+                            NumberAnimation { from: 0.25; to: 1.0; duration: 320 }
+                            NumberAnimation { from: 1.0; to: 0.25; duration: 320 }
+                            PauseAnimation { duration: (2 - index) * 160 }
+                        }
+                    }
                 }
             }
 
@@ -349,10 +396,39 @@ Window {
             Rectangle {
                 width: parent.width
                 height: Math.min(120, Math.max(38, (controller.needsKey && controller.signsIn ? signInLabel.implicitHeight : controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
-                radius: 8
+                radius: 12
                 color: palette.base
+                border.width: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus) ? 2 : 1
                 border.color: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus)
-                    ? palette.highlight : Qt.alpha(palette.windowText, 0.2)
+                    ? Qt.alpha(palette.highlight, 0.85) : Qt.alpha(palette.windowText, 0.16)
+
+                // Send button: appears once there is something to send.
+                Rectangle {
+                    id: sendButton
+                    visible: !controller.needsKey && input.text.trim().length > 0
+                    width: 26
+                    height: 26
+                    radius: 13
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: sendArea.containsMouse ? Qt.lighter(palette.highlight, 1.15) : palette.highlight
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\u2191"
+                        font.pixelSize: 15
+                        font.bold: true
+                        color: palette.highlightedText
+                    }
+                    MouseArea {
+                        id: sendArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: popup.submit()
+                    }
+                }
 
                 // For a provider used through an account (ChatGPT): Enter starts the
                 // sign-in, which is confirmed in the browser.
@@ -385,7 +461,8 @@ Window {
                     id: input
                     visible: !controller.needsKey
                     anchors.fill: parent
-                    anchors.margins: 9
+                    anchors.margins: 10
+                    anchors.rightMargin: 40
                     color: palette.text
                     font.pixelSize: 14
                     wrapMode: TextEdit.Wrap

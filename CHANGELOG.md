@@ -40,6 +40,10 @@ All notable changes are documented here. The format follows
   for subscription use without an API key. Tested against a scripted server only; relies on an
   undocumented backend and may not be permitted by OpenAI's terms.
 
+- Visual refresh: a rounder card with a soft shadow, a fade-and-settle opening, a focus ring,
+  a send button that appears once there is text, and animated thinking dots. Checked by loading
+  the interface headlessly; **not yet looked at on screen**.
+
 ### Fixed (since the first popup)
 
 - Google reports a wrong API key as HTTP 400, which was shown as a generic error; it is now an
