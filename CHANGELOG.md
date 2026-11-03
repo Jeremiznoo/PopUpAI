@@ -75,7 +75,12 @@ All notable changes are documented here. The format follows
 - DeepSeek as an API-key provider (OpenAI-compatible protocol, `deepseek-flash` by default). Its endpoint and
   authentication error were confirmed with one request carrying an invalid key; a valid key has not been tried.
 
+- `tools/build-deb.sh` builds the Debian package in a Debian 13 container made from the Exegol image; the Fedora package is
+  built by the release workflow.
+
 ### Fixed (since the first popup)
+- The application did not start where the `org.kde.layershell` QML module is not packaged (Debian): the corner placement
+  is now optional and a plain window is used without it.
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate
   reads as its own model object. It is now `name`.

@@ -5,15 +5,19 @@
 - `LICENSE` (MIT) and the `license` field of every crate.
 - The Fedora spec, the Debian packaging, the AUR `PKGBUILD` and the release workflow (see `release/README.md`).
 
-## What has not been done
+## What has been done
 
-None of the packages has been built, installed or run. The Fedora spec and the Debian control file list
-dependencies written by hand: the first CI build is their first test, and the Debian runtime
-dependencies in particular (the `qml6-module-*` packages and `layer-shell-qt`) have to be confirmed on a clean
-Debian or Ubuntu system. The workflow uses a pre-release flag on purpose.
+- **Fedora `.rpm`:** built by the release workflow in a Fedora container when a `v*` tag is pushed, and attached
+  to a pre-release. The build works (the spec, the dependencies and the icon and launcher install). The package
+  has not been installed or run on a Fedora system other than the development machine.
+- **Debian `.deb`:** built with `tools/build-deb.sh` in a Debian 13 container made from the Exegol image, then
+  attached to the release with `gh release upload`. It installs on Debian 13 with its dependencies resolved, and
+  starts there (headless): installing it showed that Debian does not package the `org.kde.layershell` QML
+  module, so the interface now falls back to a plain window without it. It has not been run on a real Debian
+  desktop, nor on Ubuntu.
 
-A `.deb` or `.rpm` built on the development machine would not run elsewhere: Qt and libc differ between
-distributions. That is why the packages are built by CI in a container of each target.
+A package built on one distribution would not run on another (Qt and libc differ), which is why each is built
+in a container of its target.
 
 ## Before making the repository public
 
