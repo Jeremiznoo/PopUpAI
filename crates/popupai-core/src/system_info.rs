@@ -59,7 +59,7 @@ fn shell_name() -> Option<String> {
 
 /// The description sent to the model. The facts that do not change while the application
 /// runs are read once; the date is read each time.
-pub fn describe() -> String {
+pub fn describe(can_run_commands: bool) -> String {
     static FIXED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     let fixed = FIXED.get_or_init(|| {
         let mut lines: Vec<String> = Vec::new();
@@ -96,11 +96,16 @@ pub fn describe() -> String {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let (year, month, day) = date_from_unix(seconds);
-    format!(
-        "The user's computer:\n{fixed}\n- Date: {year:04}-{month:02}-{day:02}\n\
-         You cannot run commands or read files on it here: when a command would help, give one the \
+    let abilities = if can_run_commands {
+        "You can run shell commands on it with the run_command tool, for example to find a file or \
+         check a setting: use it when it helps instead of only explaining. Simple read-only \
+         commands run at once; any other command is shown to the user, who may refuse it. Write \
+         commands for this system, never destructive ones unless the user asked."
+    } else {
+        "You cannot run commands or read files on it here: when a command would help, give one the \
          user can run, written for this system."
-    )
+    };
+    format!("The user's computer:\n{fixed}\n- Date: {year:04}-{month:02}-{day:02}\n{abilities}")
 }
 
 #[cfg(test)]
@@ -132,11 +137,16 @@ mod tests {
 
     #[test]
     fn the_description_has_the_system_and_leaves_out_identity() {
-        let text = describe();
+        let text = describe(false);
         assert!(text.contains("Operating system:"), "{text}");
         assert!(text.contains("Architecture:"), "{text}");
         assert!(text.contains("Date: 20"), "{text}");
         assert!(text.contains("cannot run commands"), "{text}");
+        assert!(
+            describe(true).contains("run_command"),
+            "tools are mentioned only when available"
+        );
+        assert!(!text.contains("run_command"), "{text}");
         for private in [
             std::env::var("USER").unwrap_or_default(),
             std::env::var("HOME").unwrap_or_default(),

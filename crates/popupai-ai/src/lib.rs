@@ -8,6 +8,7 @@
 //! are covered by offline fixtures and a local mock server. They have **not**
 //! been exercised against the live services; see `docs/DEVELOPMENT.md`.
 
+mod agent;
 mod anthropic;
 mod chatgpt;
 mod decode;
@@ -20,6 +21,7 @@ mod openai;
 mod provider;
 mod types;
 
+pub use agent::{AgentEvent, AgentItem, AgentRequest, AgentStream, ToolCall, ToolSpec};
 pub use anthropic::AnthropicProvider;
 pub use chatgpt::ChatGptProvider;
 pub use error::ProviderError;

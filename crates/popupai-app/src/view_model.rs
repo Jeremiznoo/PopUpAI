@@ -39,6 +39,15 @@ pub struct ViewModel {
     pub answer: String,
     pub error: String,
     pub status: Status,
+    /// A command waiting for the user's approval.
+    pub permission: Option<Permission>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Permission {
+    pub call_id: String,
+    pub command: String,
+    pub reason: String,
 }
 
 /// The question and the answer are private: `Debug` shows only their sizes.
@@ -88,6 +97,7 @@ impl ViewModel {
 
     /// The user pressed Stop.
     pub fn stop(&mut self) {
+        self.permission = None;
         if self.status == Status::Streaming {
             self.status = Status::Stopped;
         }
@@ -109,6 +119,7 @@ impl ViewModel {
                     return false;
                 }
                 self.status = Status::Done;
+                self.permission = None;
                 true
             }
             Event::Failed { session, message } if self.is_current(*session) => {
@@ -117,6 +128,20 @@ impl ViewModel {
                 }
                 self.error = message.clone();
                 self.status = Status::Failed;
+                self.permission = None;
+                true
+            }
+            Event::Permission {
+                session,
+                call_id,
+                command,
+                reason,
+            } if self.is_current(*session) && self.status == Status::Streaming => {
+                self.permission = Some(Permission {
+                    call_id: call_id.clone(),
+                    command: command.clone(),
+                    reason: reason.clone(),
+                });
                 true
             }
             _ => false,
@@ -350,5 +375,38 @@ mod tests {
         model.clear_error();
         assert_eq!(model.status, Status::Idle);
         assert!(model.error.is_empty());
+    }
+
+    #[test]
+    fn a_permission_request_shows_until_it_is_answered_or_the_answer_ends() {
+        let mut vm = ViewModel::default();
+        vm.begin(1);
+        vm.ask(1, "make a file");
+        assert!(vm.apply(&Event::Permission {
+            session: 1,
+            call_id: "c1".into(),
+            command: "touch x".into(),
+            reason: "not a known read-only command".into(),
+        }));
+        assert_eq!(
+            vm.permission.as_ref().map(|p| p.command.as_str()),
+            Some("touch x")
+        );
+        assert!(vm.apply(&Event::Finished { session: 1 }));
+        assert!(vm.permission.is_none());
+    }
+
+    #[test]
+    fn a_permission_request_for_another_session_is_ignored() {
+        let mut vm = ViewModel::default();
+        vm.begin(2);
+        vm.ask(2, "q");
+        assert!(!vm.apply(&Event::Permission {
+            session: 1,
+            call_id: "c".into(),
+            command: "rm x".into(),
+            reason: "r".into(),
+        }));
+        assert!(vm.permission.is_none());
     }
 }

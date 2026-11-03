@@ -12,3 +12,4 @@ pub mod session;
 pub mod shortcut;
 pub mod state;
 pub mod system_info;
+pub mod tools;

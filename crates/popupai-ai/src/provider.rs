@@ -51,6 +51,24 @@ pub trait Provider: Send + Sync {
     fn stream_chat(&self, request: ChatRequest)
     -> BoxFuture<'_, Result<ChatStream, ProviderError>>;
 
+    /// Whether [`Provider::stream_agent`] works: the provider can be given tools.
+    fn supports_tools(&self) -> bool {
+        false
+    }
+
+    /// A streamed completion in which the model may ask for tools to be run. The caller runs
+    /// them and calls this again with the results appended to `items`.
+    fn stream_agent(
+        &self,
+        _request: crate::AgentRequest,
+    ) -> BoxFuture<'_, Result<crate::AgentStream, ProviderError>> {
+        Box::pin(async {
+            Err(ProviderError::InvalidRequest(
+                "this provider cannot run tools".into(),
+            ))
+        })
+    }
+
     /// List available models. Also serves as the connection test.
     fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, ProviderError>>;
 }

@@ -174,6 +174,9 @@ pub struct Advanced {
     /// architecture, desktop, shell, language, date) so its commands and advice fit.
     /// See `system_info` for exactly what is sent.
     pub share_system_info: bool,
+    /// Let the model run commands on this computer, when its provider supports tools: simple
+    /// read-only commands run at once, every other command waits for the user's approval.
+    pub allow_commands: bool,
 }
 
 impl Default for Advanced {
@@ -184,6 +187,7 @@ impl Default for Advanced {
             max_tokens: None,
             timeout_secs: 120,
             share_system_info: true,
+            allow_commands: true,
         }
     }
 }

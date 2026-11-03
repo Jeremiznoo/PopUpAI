@@ -239,7 +239,8 @@ Window {
     // Window-wide keys, whichever field has the focus.
     Shortcut {
         sequence: "Esc"
-        onActivated: popup.settingsOpen ? popup.closeSettings()
+        onActivated: controller.permissionCommand.length > 0 ? controller.answerPermission(false)
+                     : popup.settingsOpen ? popup.closeSettings()
                      : popup.pickerOpen ? popup.closePicker() : popup.closePopup("escape")
     }
     Shortcut {
@@ -288,6 +289,15 @@ Window {
         }
 
         // The list of models arrives asynchronously after Ctrl+P.
+        // A command the model wants to run: the question is put to the user, and the
+        // keyboard goes to the confirmation until it is answered.
+        function onPermissionCommandChanged() {
+            if (controller.permissionCommand.length > 0)
+                permissionKeys.forceActiveFocus()
+            else if (popup.visible)
+                popup.focusField()
+        }
+
         function onSettingsJsonChanged() {
             try {
                 popup.allSettings = JSON.parse(controller.settingsJson)
@@ -481,8 +491,75 @@ Window {
                 color: Qt.alpha(palette.windowText, 0.6)
             }
 
+            // The model wants to run a command that is not a plain read: show all of it and wait.
+            Rectangle {
+                id: permissionBox
+                visible: controller.permissionCommand.length > 0
+                width: parent.width
+                height: permissionColumn.implicitHeight + 20
+                radius: 12
+                color: Qt.alpha("#d08770", 0.14)
+                border.width: 2
+                border.color: Qt.alpha("#d08770", 0.8)
+
+                Item {
+                    id: permissionKeys
+                    anchors.fill: parent
+                    focus: controller.permissionCommand.length > 0
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            controller.answerPermission(true)
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Escape) {
+                            controller.answerPermission(false)
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                Column {
+                    id: permissionColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 10
+                    spacing: 6
+
+                    Text {
+                        text: "Run this command?"
+                        font.bold: true
+                        font.pixelSize: 13
+                        color: palette.windowText
+                    }
+                    TextEdit {
+                        width: parent.width
+                        readOnly: true
+                        selectByMouse: true
+                        activeFocusOnPress: false
+                        wrapMode: TextEdit.WrapAnywhere
+                        text: controller.permissionCommand
+                        font.family: "monospace"
+                        font.pixelSize: 12
+                        color: palette.text
+                    }
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: "It asks because it " + controller.permissionReason + "."
+                        font.pixelSize: 11
+                        color: Qt.alpha(palette.windowText, 0.65)
+                    }
+                    Row {
+                        spacing: 16
+                        TextButton { text: "Run  (Enter)"; onClicked: controller.answerPermission(true) }
+                        TextButton { text: "Don't run  (Esc)"; onClicked: controller.answerPermission(false) }
+                    }
+                }
+            }
+
             // The one thing that is always there: the field.
             Rectangle {
+                visible: controller.permissionCommand.length === 0
                 width: parent.width
                 height: Math.min(120, Math.max(38, (controller.needsKey && controller.signsIn ? signInColumn.implicitHeight : controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
                 radius: 12

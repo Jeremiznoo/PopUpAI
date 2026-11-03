@@ -42,6 +42,7 @@ async fn the_first_run_configuration_answers_through_a_real_ollama() {
             Event::Chunk { text, .. } => answer.push_str(&text),
             Event::Finished { .. } => break,
             Event::Failed { message, .. } => panic!("the request failed: {message}"),
+            Event::Permission { .. } => panic!("no command is expected from a local model here"),
         }
     }
     println!("answer: {answer:?}");

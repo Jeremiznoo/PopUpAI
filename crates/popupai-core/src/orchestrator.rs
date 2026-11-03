@@ -17,8 +17,9 @@ use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use popupai_ai::chatgpt_login::{self, DeviceCode, Poll, Tokens};
 use popupai_ai::{
-    AnthropicProvider, ChatGptProvider, ChatMessage, ChatRequest, GeminiProvider, OllamaProvider,
-    OpenAiFlavor, OpenAiProvider, Provider, ProviderConfig, ProviderError, Role as AiRole,
+    AgentEvent, AgentItem, AgentRequest, AnthropicProvider, ChatGptProvider, ChatMessage,
+    ChatRequest, GeminiProvider, OllamaProvider, OpenAiFlavor, OpenAiProvider, Provider,
+    ProviderConfig, ProviderError, Role as AiRole, ToolCall, ToolSpec,
 };
 use popupai_security::{Endpoint, Secret, SecretStore, StoreError};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -45,6 +46,14 @@ pub enum Event {
         session: SessionId,
         message: String,
     },
+    /// The model wants to run a command that needs the user's approval: answer with
+    /// [`Orchestrator::answer_permission`] using `call_id`.
+    Permission {
+        session: SessionId,
+        call_id: String,
+        command: String,
+        reason: String,
+    },
 }
 
 impl fmt::Debug for Event {
@@ -56,6 +65,16 @@ impl fmt::Debug for Event {
             Self::Finished { session } => write!(f, "Finished {{ session: {session} }}"),
             Self::Failed { session, message } => {
                 write!(f, "Failed {{ session: {session}, {message:?} }}")
+            }
+            // The command is what the user is being asked about: not shown in a debug dump.
+            Self::Permission {
+                session, command, ..
+            } => {
+                write!(
+                    f,
+                    "Permission {{ session: {session}, {} bytes }}",
+                    command.len()
+                )
             }
         }
     }
@@ -130,6 +149,8 @@ struct State {
     rejected_keys: HashSet<String>,
     /// A model picked in the popup, which wins over the provider's configured one.
     selected_model: Option<ModelRef>,
+    /// Commands waiting for the user's answer, by tool call id.
+    permissions: HashMap<String, tokio::sync::oneshot::Sender<bool>>,
 }
 
 struct Inner {
@@ -315,6 +336,7 @@ impl Orchestrator {
             providers: HashMap::new(),
             rejected_keys: HashSet::new(),
             selected_model: None,
+            permissions: HashMap::new(),
         };
         let inner = Inner {
             state: Mutex::new(state),
@@ -550,6 +572,13 @@ impl Orchestrator {
         self.inner.state().config.clone()
     }
 
+    /// The user's answer to an [`Event::Permission`].
+    pub fn answer_permission(&self, call_id: &str, allow: bool) {
+        if let Some(sender) = self.inner.state().permissions.remove(call_id) {
+            let _ = sender.send(allow);
+        }
+    }
+
     /// The popup was opened: a fresh, empty session.
     pub fn open(&self) -> Opening {
         let mut state = self.inner.state();
@@ -760,6 +789,8 @@ struct Job {
     entry: ProviderEntry,
     request: ChatRequest,
     timeout: Duration,
+    share_system_info: bool,
+    allow_commands: bool,
 }
 
 /// Why a request could not even start, with the provider it concerned.
@@ -770,15 +801,9 @@ struct SetupFailure {
 
 /// The user's own instructions, followed by the description of their system unless that was
 /// turned off. `None` when there is neither.
-fn instructions(advanced: &crate::config::Advanced) -> Option<String> {
-    let own = advanced
-        .system_prompt
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    let system = advanced
-        .share_system_info
-        .then(crate::system_info::describe);
+fn compose_instructions(own: Option<&str>, share_system_info: bool, tools: bool) -> Option<String> {
+    let own = own.map(str::trim).filter(|s| !s.is_empty());
+    let system = share_system_info.then(|| crate::system_info::describe(tools));
     match (own, system) {
         (Some(own), Some(system)) => Some(format!("{own}\n\n{system}")),
         (Some(own), None) => Some(own.to_owned()),
@@ -833,7 +858,10 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
     let request = ChatRequest {
         model,
         messages,
-        system_prompt: instructions(advanced),
+        system_prompt: advanced
+            .system_prompt
+            .clone()
+            .filter(|s| !s.trim().is_empty()),
         temperature: entry.temperature.or(advanced.temperature),
         max_tokens: entry.max_tokens.or(advanced.max_tokens),
     };
@@ -842,6 +870,8 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
         entry,
         request,
         timeout,
+        share_system_info: advanced.share_system_info,
+        allow_commands: advanced.allow_commands,
     })
 }
 
@@ -852,14 +882,26 @@ async fn run(inner: Arc<Inner>, id: SessionId, job: Job) {
 
 async fn answer(inner: &Arc<Inner>, id: SessionId, job: &Job) -> Result<(), RequestError> {
     let provider = provider_for(inner, job).await?;
+    let tools = job.allow_commands && provider.supports_tools();
+    let instructions = compose_instructions(
+        job.request.system_prompt.as_deref(),
+        job.share_system_info,
+        tools,
+    );
     tracing::info!(
         provider = %job.entry.id,
         kind = ?job.entry.kind,
         model = %job.request.model,
         messages = job.request.messages.len(),
+        tools,
         "request started"
     );
-    let mut stream = provider.stream_chat(job.request.clone()).await?;
+    if tools {
+        return agent_answer(inner, id, job, &*provider, instructions).await;
+    }
+    let mut request = job.request.clone();
+    request.system_prompt = instructions;
+    let mut stream = provider.stream_chat(request).await?;
     let mut bytes = 0usize;
     while let Some(piece) = stream.next().await {
         let text = piece?;
@@ -870,6 +912,132 @@ async fn answer(inner: &Arc<Inner>, id: SessionId, job: &Job) -> Result<(), Requ
     }
     tracing::info!(provider = %job.entry.id, bytes, "request finished");
     Ok(())
+}
+
+/// Most model turns in one answer, so a model that keeps asking for commands stops.
+const MAX_AGENT_STEPS: usize = 8;
+/// How long the user has to answer a permission request.
+const PERMISSION_WAIT: Duration = Duration::from_secs(120);
+
+/// The conversation as a model that can run commands: it answers, may ask for a command, is
+/// given the result, and carries on, until it answers without asking.
+async fn agent_answer(
+    inner: &Arc<Inner>,
+    id: SessionId,
+    job: &Job,
+    provider: &dyn Provider,
+    instructions: Option<String>,
+) -> Result<(), RequestError> {
+    let mut items: Vec<AgentItem> = job
+        .request
+        .messages
+        .iter()
+        .map(|m| match m.role {
+            AiRole::User => AgentItem::User(m.content.clone()),
+            AiRole::Assistant => AgentItem::Assistant(m.content.clone()),
+        })
+        .collect();
+    let spec = ToolSpec {
+        name: crate::tools::TOOL_NAME.to_owned(),
+        description: "Run a shell command on the user's computer and get its output. Simple \
+                      read-only commands run at once; any other command is shown to the user, who \
+                      may refuse it."
+            .to_owned(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": { "type": "string", "description": "The command line, run with sh -c" }
+            },
+            "required": ["command"],
+        }),
+    };
+    let mut bytes = 0usize;
+    for _ in 0..MAX_AGENT_STEPS {
+        let mut stream = provider
+            .stream_agent(AgentRequest {
+                model: job.request.model.clone(),
+                instructions: instructions.clone(),
+                items: items.clone(),
+                tools: vec![spec.clone()],
+            })
+            .await?;
+        let (mut call, mut echoed) = (None, Vec::new());
+        while let Some(event) = stream.next().await {
+            match event? {
+                AgentEvent::Text(text) => {
+                    bytes += text.len();
+                    if !inner.deliver(id, text) {
+                        return Ok(());
+                    }
+                }
+                AgentEvent::Call(c) => {
+                    call.get_or_insert(c);
+                }
+                AgentEvent::Raw(value) => echoed.push(value),
+            }
+        }
+        let Some(call) = call else {
+            tracing::info!(provider = %job.entry.id, bytes, "request finished");
+            return Ok(());
+        };
+        let Some(output) = run_tool_call(inner, id, &call).await else {
+            return Ok(()); // the session was stopped meanwhile
+        };
+        items.extend(echoed.into_iter().map(AgentItem::Raw));
+        items.push(AgentItem::Call(call.clone()));
+        items.push(AgentItem::Output {
+            call_id: call.call_id,
+            output,
+        });
+    }
+    let _ = inner.deliver(
+        id,
+        "\n\n(Stopped: too many steps in one answer.)".to_owned(),
+    );
+    Ok(())
+}
+
+/// Run what the model asked for, after the user's approval when the command is not a plain
+/// read. Returns the text to give back to the model, or `None` if the answer was stopped.
+async fn run_tool_call(inner: &Arc<Inner>, id: SessionId, call: &ToolCall) -> Option<String> {
+    let command = (call.name == crate::tools::TOOL_NAME)
+        .then(|| serde_json::from_str::<serde_json::Value>(&call.arguments).ok())
+        .flatten()
+        .and_then(|v| {
+            v.get("command")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        });
+    let Some(command) = command else {
+        return Some("error: unknown tool or missing `command` argument".to_owned());
+    };
+    // The command is shown in the answer, so the user always sees what ran.
+    if !inner.deliver(id, format!("\n\n`$ {}`\n\n", command.replace('`', "'"))) {
+        return None;
+    }
+    if let crate::tools::Decision::Ask(reason) = crate::tools::classify(&command) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        inner.state().permissions.insert(call.call_id.clone(), tx);
+        inner.emit(Event::Permission {
+            session: id,
+            call_id: call.call_id.clone(),
+            command: command.clone(),
+            reason,
+        });
+        let allowed = tokio::time::timeout(PERMISSION_WAIT, rx)
+            .await
+            .is_ok_and(|answer| answer.unwrap_or(false));
+        inner.state().permissions.remove(&call.call_id);
+        if !allowed {
+            tracing::info!("a command was not approved");
+            if !inner.deliver(id, "*(not run)*\n\n".to_owned()) {
+                return None;
+            }
+            return Some("The user declined to run this command. Do not retry it; answer without it or suggest what they could run themselves.".to_owned());
+        }
+    }
+    tracing::info!("a command was run");
+    Some(crate::tools::run(&command).await)
 }
 
 /// The cached provider, or a new one built with the key from the secret store.
@@ -1826,27 +1994,226 @@ mod tests {
 
     #[test]
     fn the_system_description_follows_the_users_own_instructions_unless_turned_off() {
-        let mut advanced = Advanced {
-            system_prompt: Some("Be brief.".into()),
-            share_system_info: true,
-            ..Advanced::default()
-        };
-        let both = instructions(&advanced).unwrap();
+        let both = compose_instructions(Some("Be brief."), true, false).unwrap();
         assert!(
             both.starts_with("Be brief.\n\nThe user's computer:"),
             "{both}"
         );
-
-        advanced.system_prompt = None;
         assert!(
-            instructions(&advanced)
+            compose_instructions(None, true, false)
                 .unwrap()
                 .starts_with("The user's computer:")
         );
+        assert!(
+            compose_instructions(None, true, true)
+                .unwrap()
+                .contains("run_command")
+        );
+        assert_eq!(compose_instructions(None, false, false), None);
+        assert_eq!(compose_instructions(Some("  "), false, true), None);
+        assert_eq!(
+            compose_instructions(Some("Be brief."), false, true).as_deref(),
+            Some("Be brief.")
+        );
+    }
 
-        advanced.share_system_info = false;
-        assert_eq!(instructions(&advanced), None);
-        advanced.system_prompt = Some("  ".into());
-        assert_eq!(instructions(&advanced), None);
+    /// A provider that can use tools, whose turns are scripted by the test.
+    struct AgentFake {
+        turns: Mutex<VecDeque<Vec<AgentEvent>>>,
+        requests: Mutex<Vec<AgentRequest>>,
+    }
+
+    impl Provider for AgentFake {
+        fn kind(&self) -> &'static str {
+            "agent-fake"
+        }
+        fn supports_tools(&self) -> bool {
+            true
+        }
+        fn stream_chat(&self, _: ChatRequest) -> BoxFuture<'_, Result<ChatStream, ProviderError>> {
+            Box::pin(async { Err(ProviderError::InvalidRequest("use tools".into())) })
+        }
+        fn stream_agent(
+            &self,
+            request: AgentRequest,
+        ) -> BoxFuture<'_, Result<popupai_ai::AgentStream, ProviderError>> {
+            self.requests.lock().unwrap().push(request);
+            let turn = self.turns.lock().unwrap().pop_front().unwrap_or_default();
+            Box::pin(async move {
+                Ok(Box::pin(stream::iter(turn.into_iter().map(Ok))) as popupai_ai::AgentStream)
+            })
+        }
+        fn list_models(&self) -> BoxFuture<'_, Result<Vec<ModelInfo>, ProviderError>> {
+            Box::pin(async { Ok(Vec::new()) })
+        }
+    }
+
+    struct AgentFactory(Arc<AgentFake>);
+
+    impl ProviderFactory for AgentFactory {
+        fn build(
+            &self,
+            _: &ProviderEntry,
+            _: Endpoint,
+            _: Option<Secret>,
+            _: Duration,
+        ) -> Result<Arc<dyn Provider>, ProviderError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    fn call(id: &str, command: &str) -> AgentEvent {
+        AgentEvent::Call(ToolCall {
+            call_id: id.into(),
+            name: crate::tools::TOOL_NAME.into(),
+            arguments: serde_json::json!({ "command": command }).to_string(),
+        })
+    }
+
+    fn agent_harness(
+        turns: Vec<Vec<AgentEvent>>,
+    ) -> (Orchestrator, UnboundedReceiver<Event>, Arc<AgentFake>) {
+        let fake = Arc::new(AgentFake {
+            turns: Mutex::new(turns.into()),
+            requests: Mutex::new(Vec::new()),
+        });
+        let (orch, events) = Orchestrator::new(
+            config(),
+            Arc::new(MemoryStore::default()),
+            Arc::new(AgentFactory(fake.clone())),
+        )
+        .unwrap();
+        (orch, events, fake)
+    }
+
+    async fn collect_until_finished(events: &mut UnboundedReceiver<Event>) -> String {
+        let mut text = String::new();
+        loop {
+            match next(events).await {
+                Event::Chunk { text: t, .. } => text.push_str(&t),
+                Event::Finished { .. } => return text,
+                Event::Failed { message, .. } => panic!("failed: {message}"),
+                Event::Permission { .. } => panic!("unexpected permission request"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_read_only_command_runs_at_once_and_its_output_goes_back_to_the_model() {
+        let (orch, mut events, fake) = agent_harness(vec![
+            vec![AgentEvent::Text("Checking.".into()), call("c1", "uname")],
+            vec![AgentEvent::Text("It is Linux.".into())],
+        ]);
+        orch.open();
+        orch.submit("what system?").unwrap();
+        let text = collect_until_finished(&mut events).await;
+        assert!(text.contains("Checking."), "{text}");
+        assert!(text.contains("`$ uname`"), "the command is shown: {text}");
+        assert!(text.contains("It is Linux."), "{text}");
+
+        let requests = fake.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(
+            requests[0].tools.len(),
+            1,
+            "the model is offered the command tool"
+        );
+        assert_eq!(requests[0].tools[0].name, crate::tools::TOOL_NAME);
+        let AgentItem::Output { output, .. } = requests[1].items.last().unwrap() else {
+            panic!("the result goes back to the model");
+        };
+        assert!(output.starts_with("exit code 0"), "{output}");
+        assert!(output.contains("Linux"), "{output}");
+    }
+
+    #[tokio::test]
+    async fn a_command_that_is_not_a_plain_read_waits_for_the_user_and_can_be_refused() {
+        let (orch, mut events, fake) = agent_harness(vec![
+            vec![call("c1", "touch /tmp/popupai-should-not-exist")],
+            vec![AgentEvent::Text("Understood.".into())],
+        ]);
+        orch.open();
+        orch.submit("make a file").unwrap();
+        let (call_id, command) = loop {
+            match next(&mut events).await {
+                Event::Permission {
+                    call_id, command, ..
+                } => break (call_id, command),
+                Event::Chunk { .. } => {}
+                other => panic!("unexpected {other:?}"),
+            }
+        };
+        assert_eq!(command, "touch /tmp/popupai-should-not-exist");
+        orch.answer_permission(&call_id, false);
+        let text = collect_until_finished(&mut events).await;
+        assert!(text.contains("not run"), "{text}");
+        assert!(!std::path::Path::new("/tmp/popupai-should-not-exist").exists());
+        let requests = fake.requests.lock().unwrap();
+        let AgentItem::Output { output, .. } = requests[1].items.last().unwrap() else {
+            panic!("the refusal goes back to the model");
+        };
+        assert!(output.contains("declined"), "{output}");
+    }
+
+    #[tokio::test]
+    async fn an_approved_command_runs_and_its_output_goes_back() {
+        let (orch, mut events, fake) = agent_harness(vec![
+            vec![call("c1", "echo approved")],
+            vec![AgentEvent::Text("Done.".into())],
+        ]);
+        orch.open();
+        orch.submit("say it").unwrap();
+        loop {
+            match next(&mut events).await {
+                Event::Permission { call_id, .. } => {
+                    orch.answer_permission(&call_id, true);
+                    break;
+                }
+                Event::Chunk { .. } => {}
+                other => panic!("unexpected {other:?}"),
+            }
+        }
+        collect_until_finished(&mut events).await;
+        let requests = fake.requests.lock().unwrap();
+        let AgentItem::Output { output, .. } = requests[1].items.last().unwrap() else {
+            panic!("the output goes back");
+        };
+        assert_eq!(output, "exit code 0\napproved\n");
+    }
+
+    #[tokio::test]
+    async fn a_model_that_keeps_asking_is_stopped_after_a_few_steps() {
+        let turns = (0..20)
+            .map(|i| vec![call(&format!("c{i}"), "pwd")])
+            .collect();
+        let (orch, mut events, fake) = agent_harness(turns);
+        orch.open();
+        orch.submit("loop").unwrap();
+        let text = collect_until_finished(&mut events).await;
+        assert!(text.contains("too many steps"), "{text}");
+        assert_eq!(fake.requests.lock().unwrap().len(), MAX_AGENT_STEPS);
+    }
+
+    #[tokio::test]
+    async fn commands_are_not_offered_when_turned_off() {
+        let mut settings = config();
+        settings.advanced.allow_commands = false;
+        let fake = Arc::new(AgentFake {
+            turns: Mutex::new(VecDeque::new()),
+            requests: Mutex::new(Vec::new()),
+        });
+        let (orch, mut events) = Orchestrator::new(
+            settings,
+            Arc::new(MemoryStore::default()),
+            Arc::new(AgentFactory(fake.clone())),
+        )
+        .unwrap();
+        orch.open();
+        orch.submit("hi").unwrap();
+        // The scripted provider refuses plain chat, which is what shows it was used instead.
+        let Event::Failed { .. } = next(&mut events).await else {
+            panic!("the plain chat path is expected");
+        };
+        assert!(fake.requests.lock().unwrap().is_empty());
     }
 }

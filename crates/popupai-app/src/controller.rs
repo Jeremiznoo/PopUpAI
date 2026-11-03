@@ -34,6 +34,8 @@ pub mod qobject {
         #[qproperty(QString, sign_in_code, cxx_name = "signInCode")]
         #[qproperty(QString, provider_id, cxx_name = "providerId")]
         #[qproperty(QString, models_json, cxx_name = "modelsJson")]
+        #[qproperty(QString, permission_command, cxx_name = "permissionCommand")]
+        #[qproperty(QString, permission_reason, cxx_name = "permissionReason")]
         #[qproperty(QString, settings_json, cxx_name = "settingsJson")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
@@ -67,6 +69,11 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "signIn"]
         fn sign_in(self: Pin<&mut PopupController>);
+
+        /// The user's answer to a command the model wants to run.
+        #[qinvokable]
+        #[cxx_name = "answerPermission"]
+        fn answer_permission(self: Pin<&mut PopupController>, allow: bool);
 
         /// Fill `settingsJson` with the rows of the settings page.
         #[qinvokable]
@@ -159,6 +166,8 @@ pub struct PopupControllerRust {
     needs_key: bool,
     can_configure_shortcut: bool,
     models_json: QString,
+    permission_command: QString,
+    permission_reason: QString,
     settings_json: QString,
     sign_in_url: QString,
     sign_in_code: QString,
@@ -308,6 +317,17 @@ impl qobject::PopupController {
         self.as_mut().set_answer_html(html);
         self.as_mut().set_error_text(error);
         self.as_mut().set_status(status);
+        let (command, reason) = {
+            let permission = self.rust().model.permission.as_ref();
+            (
+                permission.map_or(String::new(), |p| p.command.clone()),
+                permission.map_or(String::new(), |p| p.reason.clone()),
+            )
+        };
+        self.as_mut()
+            .set_permission_command(QString::from(command.as_str()));
+        self.as_mut()
+            .set_permission_reason(QString::from(reason.as_str()));
     }
 
     fn on_event(mut self: Pin<&mut Self>, event: &Event) {
@@ -365,6 +385,18 @@ impl qobject::PopupController {
             tracing::info!("opening the desktop shortcut settings");
             let _ = configure.send(());
         }
+    }
+
+    fn answer_permission(mut self: Pin<&mut Self>, allow: bool) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        if let Some(permission) = self.as_mut().rust_mut().get_mut().model.permission.take() {
+            app.orchestrator
+                .answer_permission(&permission.call_id, allow);
+            tracing::info!(allowed = allow, "command permission answered");
+        }
+        self.sync();
     }
 
     fn sign_in(mut self: Pin<&mut Self>) {
