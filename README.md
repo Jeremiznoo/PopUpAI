@@ -1,4 +1,16 @@
+<!--
+  BANNER: put the image in docs/assets/banner.png (see docs/BRANDING_PROMPT.md to generate it),
+  then remove the comment markers around the next line.
+-->
+<!-- <p align="center"><img src="docs/assets/banner.png" alt="PopUpAI" width="100%"></p> -->
+
+<p align="center">
+  <!-- LOGO: <img src="docs/assets/logo.png" alt="" width="96"> -->
+</p>
+
 # PopUpAI
+
+> 🔒 **Private repository for now.** No license has been chosen yet; nothing here is published.
 
 An AI quick-ask launcher. Press a global shortcut, a small popup appears in the
 corner of your screen with the input already focused, type a question, read the
@@ -60,15 +72,16 @@ popup is for quick questions:
 | Anthropic | `claude-haiku-5-5` | the vendor's model overview, 2026-11-02 |
 | OpenAI | `gpt-6-luna` | the vendor's model page, 2026-11-02 |
 | Google Gemini | `gemini-3.5-flash-lite` | the vendor's model page, 2026-11-02 |
-| Ollama | the smallest chat model installed | asked from your Ollama server at request time |
+| Ollama (optional) | none: you choose your own local model | listed from your own Ollama server; nothing is installed or downloaded for you |
 
 Override any of them with `model = "…"` on the provider in the configuration file.
 
 **First use.** With no key stored, PopUpAI starts on Ollama if you have it. To use a
 hosted provider, pick one of its models (Ctrl+P): the field turns into a masked key field, and
 the key you paste goes straight to the system secret store (KDE Wallet, GNOME Keyring or
-KeePassXC) and is never written to a file. Local models are never downloaded for you:
-install one yourself, for example `ollama pull llama3.2:1b`.
+KeePassXC) and is never written to a file. Local models are optional and never
+downloaded for you: if you use Ollama, install the model you want and pick it in the model picker
+(Ctrl+P) or with `model = "..."` in the configuration.
 
 **Sign in with ChatGPT (experimental).** Instead of an API key you can use a ChatGPT
 subscription: pick *ChatGPT* in the model picker (Ctrl+P), press Enter, and PopUpAI shows a
