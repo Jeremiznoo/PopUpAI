@@ -1,6 +1,7 @@
-# Builds the Fedora (.rpm) and Debian (.deb) packages and attaches them to a GitHub release when a version tag
-# is pushed (git tag v0.1.0 && git push origin v0.1.0). Each package is built in the distribution it targets,
-# because a binary built on one distribution does not run on another (different Qt and libc).
+# Builds the Fedora package (.rpm) and attaches it to a GitHub pre-release when a version tag is pushed
+# (git tag v0.1.0 && git push origin v0.1.0). It is built in a Fedora container, because a binary built on
+# one distribution does not run on another (different Qt and libc). The .deb is built by hand in a Debian
+# container (see docs/RELEASING.md) and added to the release.
 name: release
 on:
   push:
@@ -28,31 +29,8 @@ jobs:
           name: rpm
           path: ~/rpmbuild/RPMS/*/*.rpm
 
-  deb:
-    runs-on: ubuntu-latest
-    container: debian:trixie
-    steps:
-      - run: |
-          apt-get update
-          apt-get install -y --no-install-recommends git build-essential cmake pkg-config curl ca-certificates debhelper \
-            fakeroot dpkg-dev qt6-base-dev qt6-declarative-dev libgl-dev
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
-      - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          cp -r packaging/debian debian
-          sed -i "1s/.*/popupai (${version}) unstable; urgency=medium/" debian/changelog
-          export PATH="$HOME/.cargo/bin:$PATH"
-          dpkg-buildpackage -us -uc -b
-          mkdir -p out && mv ../popupai_*.deb out/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: deb
-          path: out/*.deb
-
   publish:
-    needs: [rpm, deb]
+    needs: [rpm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
