@@ -72,6 +72,9 @@ All notable changes are documented here. The format follows
   the `.rpm` and `.deb` in their own distribution when a version tag is pushed. **Nothing has been built or run yet**
   (see `docs/RELEASING.md`).
 
+- DeepSeek as an API-key provider (OpenAI-compatible protocol, `deepseek-flash` by default). Its endpoint and
+  authentication error were confirmed with one request carrying an invalid key; a valid key has not been tried.
+
 ### Fixed (since the first popup)
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate

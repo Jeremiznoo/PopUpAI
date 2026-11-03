@@ -205,6 +205,9 @@ pub enum ProviderKind {
     Anthropic,
     #[serde(rename = "gemini")]
     Gemini,
+    /// DeepSeek's API, which speaks the OpenAI chat-completions protocol.
+    #[serde(rename = "deepseek")]
+    DeepSeek,
     #[serde(rename = "ollama")]
     Ollama,
     /// A ChatGPT subscription, signed in with a device code (no API key). Experimental: it
@@ -222,6 +225,7 @@ impl ProviderKind {
             Self::OpenAi => Some("https://api.openai.com/v1"),
             Self::Anthropic => Some("https://api.anthropic.com/v1"),
             Self::Gemini => Some("https://generativelanguage.googleapis.com/v1beta"),
+            Self::DeepSeek => Some("https://api.deepseek.com"),
             Self::Ollama => Some("http://127.0.0.1:11434"),
             Self::ChatGpt => Some("https://chatgpt.com/backend-api/codex"),
             Self::OpenAiCompatible => None,
@@ -239,6 +243,7 @@ impl ProviderKind {
             Self::Anthropic => "claude-haiku-5-5",
             Self::OpenAi | Self::ChatGpt => "gpt-6-luna",
             Self::Gemini => "gemini-3.5-flash-lite",
+            Self::DeepSeek => "deepseek-flash",
             Self::Ollama | Self::OpenAiCompatible => "",
         }
     }
@@ -247,7 +252,7 @@ impl ProviderKind {
     pub fn requires_key(self) -> bool {
         matches!(
             self,
-            Self::OpenAi | Self::Anthropic | Self::Gemini | Self::ChatGpt
+            Self::OpenAi | Self::Anthropic | Self::Gemini | Self::DeepSeek | Self::ChatGpt
         )
     }
 
@@ -441,6 +446,7 @@ impl Config {
                 entry("anthropic", ProviderKind::Anthropic, "Claude"),
                 entry("openai", ProviderKind::OpenAi, "OpenAI"),
                 entry("gemini", ProviderKind::Gemini, "Gemini"),
+                entry("deepseek", ProviderKind::DeepSeek, "DeepSeek"),
                 entry("chatgpt", ProviderKind::ChatGpt, "ChatGPT"),
                 entry("ollama", ProviderKind::Ollama, "Ollama"),
             ],
@@ -922,6 +928,7 @@ mod tests {
                 ("anthropic", "claude-haiku-5-5"),
                 ("openai", "gpt-6-luna"),
                 ("gemini", "gemini-3.5-flash-lite"),
+                ("deepseek", "deepseek-flash"),
                 ("chatgpt", "gpt-6-luna"),
                 ("ollama", ""),
             ]
@@ -939,7 +946,17 @@ mod tests {
         saved.providers[0].model = "my-model".into();
         let merged = saved.with_missing_builtins();
         let ids: Vec<&str> = merged.providers.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, ["anthropic", "openai", "gemini", "ollama", "chatgpt"]);
+        assert_eq!(
+            ids,
+            [
+                "anthropic",
+                "openai",
+                "gemini",
+                "deepseek",
+                "ollama",
+                "chatgpt"
+            ]
+        );
         assert_eq!(
             merged.providers[0].model, "my-model",
             "the file's own entry is kept"
@@ -947,7 +964,7 @@ mod tests {
         merged.validate().unwrap();
 
         // An empty configuration (an empty file) gets them all.
-        assert_eq!(Config::default().with_missing_builtins().providers.len(), 5);
+        assert_eq!(Config::default().with_missing_builtins().providers.len(), 6);
     }
 
     #[test]

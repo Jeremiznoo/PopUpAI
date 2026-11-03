@@ -124,7 +124,7 @@ impl ProviderFactory for DefaultProviderFactory {
         }
         Ok(match entry.kind {
             ProviderKind::OpenAi => Arc::new(OpenAiProvider::new(config, OpenAiFlavor::OpenAi)?),
-            ProviderKind::OpenAiCompatible => {
+            ProviderKind::OpenAiCompatible | ProviderKind::DeepSeek => {
                 Arc::new(OpenAiProvider::new(config, OpenAiFlavor::Compatible)?)
             }
             ProviderKind::Anthropic => Arc::new(AnthropicProvider::new(config)?),
@@ -1868,6 +1868,11 @@ mod tests {
                     "Gemini \u{b7} gemini-3.5-flash-lite".into(),
                     true
                 ),
+                (
+                    "deepseek".into(),
+                    "DeepSeek \u{b7} deepseek-flash".into(),
+                    true
+                ),
                 ("chatgpt".into(), "ChatGPT \u{b7} gpt-6-luna".into(), true),
                 ("ollama".into(), "Ollama".into(), false),
             ]
@@ -1881,8 +1886,8 @@ mod tests {
         let seen: Vec<String> = (0..5)
             .map(|_| h.orch.cycle_provider().unwrap().id)
             .collect();
-        assert_eq!(seen, ["openai", "gemini", "chatgpt", "ollama", "anthropic"]);
-        assert_eq!(h.orch.current_provider().unwrap().id, "anthropic");
+        assert_eq!(seen, ["openai", "gemini", "deepseek", "chatgpt", "ollama"]);
+        assert_eq!(h.orch.current_provider().unwrap().id, "ollama");
         assert!(harness(Config::default()).orch.cycle_provider().is_none());
     }
 
@@ -2056,6 +2061,7 @@ mod tests {
                 ("anthropic", "claude-haiku-5-5"),
                 ("openai", "gpt-6-luna"),
                 ("gemini", "gemini-3.5-flash-lite"),
+                ("deepseek", "deepseek-flash"),
                 ("chatgpt", "gpt-6-luna"),
             ],
             "Ollama contributes only what its server lists"

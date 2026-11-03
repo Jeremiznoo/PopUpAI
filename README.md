@@ -63,6 +63,7 @@ Only KDE Plasma on Wayland has been run on a real session; the others are writte
 | Anthropic | API key | `claude-haiku-5-5` |
 | OpenAI | API key | `gpt-6-luna` |
 | Google Gemini | API key | `gemini-3.5-flash-lite` |
+| DeepSeek | API key | `deepseek-flash` |
 | Ollama and any OpenAI-compatible server | Your own local model, chosen by you | none |
 
 Each default is the lightest model its vendor offers. Override any of them with `model = "…"` on the

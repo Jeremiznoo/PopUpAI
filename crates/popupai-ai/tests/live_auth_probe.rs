@@ -62,6 +62,10 @@ async fn each_hosted_vendor_rejects_an_invalid_key_as_an_authentication_error() 
         OpenAiProvider::new(config("https://api.openai.com/v1"), OpenAiFlavor::OpenAi).unwrap();
     probe("openai", &openai, "gpt-6-luna").await;
 
+    let deepseek =
+        OpenAiProvider::new(config("https://api.deepseek.com"), OpenAiFlavor::Compatible).unwrap();
+    probe("deepseek", &deepseek, "deepseek-flash").await;
+
     let gemini =
         GeminiProvider::new(config("https://generativelanguage.googleapis.com/v1beta")).unwrap();
     probe("gemini", &gemini, "gemini-3.5-flash-lite").await;
