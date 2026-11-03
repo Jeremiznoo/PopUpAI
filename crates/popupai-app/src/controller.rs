@@ -30,7 +30,9 @@ pub mod qobject {
         #[qproperty(bool, needs_key, cxx_name = "needsKey")]
         #[qproperty(bool, can_configure_shortcut, cxx_name = "canConfigureShortcut")]
         #[qproperty(bool, signs_in, cxx_name = "signsIn")]
-        #[qproperty(QString, sign_in_text, cxx_name = "signInText")]
+        #[qproperty(QString, sign_in_url, cxx_name = "signInUrl")]
+        #[qproperty(QString, sign_in_code, cxx_name = "signInCode")]
+        #[qproperty(QString, provider_id, cxx_name = "providerId")]
         #[qproperty(QString, models_json, cxx_name = "modelsJson")]
         #[qproperty(QString, settings_json, cxx_name = "settingsJson")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
@@ -158,7 +160,9 @@ pub struct PopupControllerRust {
     can_configure_shortcut: bool,
     models_json: QString,
     settings_json: QString,
-    sign_in_text: QString,
+    sign_in_url: QString,
+    sign_in_code: QString,
+    provider_id: QString,
     signs_in: bool,
     signing_in: bool,
     start_visible: bool,
@@ -379,14 +383,14 @@ impl qobject::PopupController {
         app.runtime.spawn(async move {
             let outcome = async {
                 let code = orchestrator.begin_sign_in().await?;
-                let text = format!(
-                    "Open {} and enter the code {}",
-                    code.verification_url, code.user_code
-                );
+                let (url, user_code) = (code.verification_url.clone(), code.user_code.clone());
                 let _ = qt_thread.queue(move |mut controller| {
                     controller
                         .as_mut()
-                        .set_sign_in_text(QString::from(text.as_str()));
+                        .set_sign_in_url(QString::from(url.as_str()));
+                    controller
+                        .as_mut()
+                        .set_sign_in_code(QString::from(user_code.as_str()));
                 });
                 // Open the page for the user. The address comes from the sign-in server
                 // for this code, and is passed as one argument, never to a shell.
@@ -396,7 +400,8 @@ impl qobject::PopupController {
             .await;
             let _ = qt_thread.queue(move |mut controller| {
                 controller.as_mut().rust_mut().get_mut().signing_in = false;
-                controller.as_mut().set_sign_in_text(QString::from(""));
+                controller.as_mut().set_sign_in_url(QString::from(""));
+                controller.as_mut().set_sign_in_code(QString::from(""));
                 match outcome {
                     Ok(()) => {
                         tracing::info!("signed in");
@@ -427,6 +432,8 @@ impl qobject::PopupController {
         {
             self.as_mut()
                 .set_provider_label(QString::from(info.label.as_str()));
+            self.as_mut()
+                .set_provider_id(QString::from(info.id.as_str()));
         }
         self.as_mut().refresh_needs_key();
     }
@@ -537,6 +544,8 @@ impl qobject::PopupController {
         if let Some(info) = app.orchestrator.current_provider() {
             self.as_mut()
                 .set_provider_label(QString::from(info.label.as_str()));
+            self.as_mut()
+                .set_provider_id(QString::from(info.id.as_str()));
         }
         // Remember it (it is also what the application starts on next time).
         let path = app.state_path.clone();

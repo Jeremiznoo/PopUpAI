@@ -56,9 +56,28 @@ Window {
         listModel.clear()
         for (const entry of allModels) {
             if (query.length > 0
-                    && (entry.model + " " + entry.provider_label).toLowerCase().indexOf(query) < 0)
+                    && (entry.name + " " + entry.provider_label).toLowerCase().indexOf(query) < 0)
                 continue
             listModel.append(entry)
+        }
+        // Any model name can be typed: the lists are only what the services and the local
+        // server say they have.
+        const typed = searchInput.text.trim()
+        if (typed.length > 0 && controller.providerId.length > 0) {
+            let exact = false
+            for (const entry of allModels)
+                if (entry.name.toLowerCase() === typed.toLowerCase() && entry.provider === controller.providerId)
+                    exact = true
+            if (!exact)
+                listModel.append({
+                    group: "Use this name on the current provider",
+                    provider: controller.providerId,
+                    provider_label: controller.providerLabel.split(" \u00b7 ")[0],
+                    name: typed,
+                    favorite: false,
+                    current: false,
+                    requires_key: false
+                })
         }
         list.currentIndex = listModel.count > 0 ? 0 : -1
     }
@@ -124,7 +143,7 @@ Window {
         if (list.currentIndex < 0)
             return
         const entry = listModel.get(list.currentIndex)
-        controller.chooseModel(entry.provider, entry.model)
+        controller.chooseModel(entry.provider, entry.name)
         closePicker()
     }
 
@@ -169,6 +188,13 @@ Window {
         controller.saveKey(keyInput.text)
         // The pasted key leaves this field at once; the controller wipes its copy.
         keyInput.text = ""
+    }
+
+    // Only on the user's request: the clipboard is never written on its own.
+    function copyText(text) {
+        clipboard.text = text
+        clipboard.selectAll()
+        clipboard.copy()
     }
 
     function copyAnswer() {
@@ -458,7 +484,7 @@ Window {
             // The one thing that is always there: the field.
             Rectangle {
                 width: parent.width
-                height: Math.min(120, Math.max(38, (controller.needsKey && controller.signsIn ? signInLabel.implicitHeight : controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
+                height: Math.min(120, Math.max(38, (controller.needsKey && controller.signsIn ? signInColumn.implicitHeight : controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
                 radius: 12
                 color: palette.base
                 border.width: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus) ? 2 : 1
@@ -501,15 +527,60 @@ Window {
                     anchors.fill: parent
                     anchors.margins: 9
 
-                    Text {
-                        id: signInLabel
+                    Column {
+                        id: signInColumn
                         width: parent.width
-                        wrapMode: Text.Wrap
-                        text: controller.signInText.length > 0
-                            ? controller.signInText + " \u2014 waiting for your confirmation in the browser\u2026"
-                            : "Press Enter to sign in with your ChatGPT account"
-                        font.pixelSize: 13
-                        color: palette.text
+                        spacing: 5
+
+                        Text {
+                            width: parent.width
+                            wrapMode: Text.Wrap
+                            text: controller.signInCode.length > 0
+                                ? "Open the page and enter this code, then confirm:"
+                                : "Press Enter to sign in with your ChatGPT account"
+                            font.pixelSize: 13
+                            color: palette.text
+                        }
+
+                        // Selectable, so the code and the link can be copied by hand too.
+                        TextEdit {
+                            visible: controller.signInCode.length > 0
+                            width: parent.width
+                            readOnly: true
+                            selectByMouse: true
+                            activeFocusOnPress: false
+                            text: controller.signInCode
+                            font.pixelSize: 20
+                            font.bold: true
+                            font.letterSpacing: 2
+                            color: palette.highlight
+                        }
+
+                        TextEdit {
+                            visible: controller.signInCode.length > 0
+                            width: parent.width
+                            readOnly: true
+                            selectByMouse: true
+                            activeFocusOnPress: false
+                            wrapMode: TextEdit.WrapAnywhere
+                            text: controller.signInUrl
+                            font.pixelSize: 11
+                            color: Qt.alpha(palette.text, 0.65)
+                        }
+
+                        Row {
+                            visible: controller.signInCode.length > 0
+                            spacing: 14
+                            TextButton { text: "Copy code"; onClicked: popup.copyText(controller.signInCode) }
+                            TextButton { text: "Copy link"; onClicked: popup.copyText(controller.signInUrl) }
+                            TextButton {
+                                text: "Open link"
+                                onClicked: {
+                                    if (controller.signInUrl.indexOf("https://") === 0)
+                                        Qt.openUrlExternally(controller.signInUrl)
+                                }
+                            }
+                        }
                     }
 
                     Keys.onPressed: event => {
@@ -801,7 +872,7 @@ Window {
                     } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F
                                && list.currentIndex >= 0) {
                         const entry = listModel.get(list.currentIndex)
-                        controller.toggleFavorite(entry.provider, entry.model)
+                        controller.toggleFavorite(entry.provider, entry.name)
                         event.accepted = true
                     }
                 }
@@ -850,9 +921,9 @@ Window {
                         anchors.rightMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
                         elide: Text.ElideRight
-                        text: (model.current ? "\u25cf " : "") + model.model
+                        text: (current ? "\u25cf " : "") + name
                         font.pixelSize: 13
-                        font.bold: model.current
+                        font.bold: current
                         color: palette.windowText
                     }
                     Text {
@@ -860,9 +931,9 @@ Window {
                         anchors.right: parent.right
                         anchors.rightMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
-                        text: (model.favorite ? "\u2605 " : "")
-                              + model.provider_label
-                              + (model.requires_key ? " \u00b7 key" : "")
+                        text: (favorite ? "\u2605 " : "")
+                              + provider_label
+                              + (requires_key ? " \u00b7 key" : "")
                         font.pixelSize: 11
                         color: Qt.alpha(palette.windowText, 0.55)
                     }

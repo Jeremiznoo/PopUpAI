@@ -51,6 +51,12 @@ All notable changes are documented here. The format follows
 
 ### Fixed (since the first popup)
 
+- The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate
+  reads as its own model object. It is now `name`.
+- The picker lists the models a connected hosted provider reports (chat models only) and what a local
+  Ollama has installed, and any model name can be typed and used.
+- The ChatGPT sign-in code and link can be selected and copied, with Copy and Open buttons.
+
 - Google reports a wrong API key as HTTP 400, which was shown as a generic error; it is now an
   authentication error. Found by a live request with an invalid key to each hosted service.
 - A refused API key could not be replaced from the popup (the message pointed at a settings

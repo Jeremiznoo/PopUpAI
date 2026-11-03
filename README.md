@@ -95,6 +95,14 @@ what you see.
 
 If a stored key is refused, the popup shows the key field again so you can paste a new one.
 
+## Your questions are not logged
+
+Questions and answers are never written to the logs, to a file or to the clipboard on their own.
+The logs hold metadata only (which provider, how many bytes, when the popup opened and closed), and
+a regression test fails if a question, an answer, a server message or a key ever appears in them.
+The popup keeps nothing between openings. Requests to a ChatGPT account ask the service not to store
+the conversation (`store: false`); what the service does beyond that is its own policy.
+
 ## Security and privacy model
 
 API keys go in the operating system's secret store, never in files, logs or Git.

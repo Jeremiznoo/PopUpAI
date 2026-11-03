@@ -11,6 +11,9 @@ pub struct Entry {
     pub group: String,
     pub provider: String,
     pub provider_label: String,
+    /// The model name. Not called `model`: in a QML delegate that name is the delegate's own
+    /// model object, and a role of that name would hide it.
+    #[serde(rename = "name")]
     pub model: String,
     pub favorite: bool,
     /// The model the next question would use.
@@ -147,7 +150,7 @@ mod tests {
             "group",
             "provider",
             "provider_label",
-            "model",
+            "name",
             "favorite",
             "current",
             "requires_key",

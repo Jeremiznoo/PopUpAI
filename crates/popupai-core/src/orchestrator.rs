@@ -239,6 +239,26 @@ pub struct ProviderInfo {
     pub signs_in: bool,
 }
 
+/// Whether a model id from a hosted service's list is one to chat with: those lists also hold
+/// embeddings, speech, image and moderation models, which cannot answer a question.
+fn chat_model(id: &str) -> bool {
+    const NOT_CHAT: [&str; 11] = [
+        "embed",
+        "whisper",
+        "tts",
+        "dall-e",
+        "moderation",
+        "image",
+        "audio",
+        "realtime",
+        "transcribe",
+        "speech",
+        "imagen",
+    ];
+    let id = id.to_ascii_lowercase();
+    !NOT_CHAT.iter().any(|word| id.contains(word))
+}
+
 /// A model that can be picked in the popup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelChoice {
@@ -379,12 +399,22 @@ impl Orchestrator {
             if !entry.effective_model().is_empty() {
                 models.push(entry.effective_model().to_owned());
             }
-            if !entry.kind.requires_key()
+            // A local server lists what is installed; a hosted service lists its models once
+            // the credential is there (an unconnected one would only answer with an error).
+            let listable = !entry.kind.requires_key()
+                || (!entry.kind.signs_in() && self.has_api_key(&entry.id).await.unwrap_or(false));
+            if listable
                 && let Ok(provider) = provider_for_entry(&self.inner, &entry, timeout).await
                 && let Ok(Ok(listed)) =
-                    tokio::time::timeout(Duration::from_secs(3), provider.list_models()).await
+                    tokio::time::timeout(Duration::from_secs(4), provider.list_models()).await
             {
-                models.extend(listed.into_iter().map(|m| m.id));
+                models.extend(
+                    listed
+                        .into_iter()
+                        .map(|m| m.id)
+                        .filter(|id| !entry.kind.requires_key() || chat_model(id))
+                        .take(60),
+                );
             }
             models.sort();
             models.dedup();
@@ -1750,5 +1780,29 @@ mod tests {
             status(&h.orch.connection_status().await, "anthropic"),
             Some(false)
         );
+    }
+
+    #[test]
+    fn model_lists_of_hosted_services_keep_only_chat_models() {
+        for chat in [
+            "gpt-6-luna",
+            "claude-haiku-5-5",
+            "gemini-3.5-flash-lite",
+            "o4-mini",
+        ] {
+            assert!(chat_model(chat), "{chat}");
+        }
+        for other in [
+            "text-embedding-3-small",
+            "whisper-1",
+            "gpt-4o-mini-tts",
+            "dall-e-3",
+            "omni-moderation-latest",
+            "gpt-realtime",
+            "gpt-image-1",
+            "imagen-4",
+        ] {
+            assert!(!chat_model(other), "{other}");
+        }
     }
 }
