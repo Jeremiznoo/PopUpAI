@@ -6,7 +6,7 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Row {
-    /// "provider", "autostart" or "shortcut": what Enter does on the row.
+    /// "provider" or "mcp": what Enter does on the row.
     pub kind: &'static str,
     pub group: &'static str,
     /// The provider id for a provider row, empty otherwise.
@@ -17,13 +17,10 @@ pub struct Row {
     pub removable: bool,
 }
 
-/// `autostart` is `None` when the desktop has no autostart folder to use. `mcp` lists the
-/// servers found on the computer, with whether the user switched each one on.
-pub fn build(
-    status: &[ConnectionStatus],
-    mcp: &[(McpServer, bool)],
-    autostart: Option<bool>,
-) -> Vec<Row> {
+/// `mcp` lists the servers found on the computer, with whether the user switched each one on.
+/// The page holds only what changes from one day to the next (connections and MCP servers):
+/// the shortcut is set once, and starting with the session is a setting in the file.
+pub fn build(status: &[ConnectionStatus], mcp: &[(McpServer, bool)]) -> Vec<Row> {
     let mut rows: Vec<Row> = status
         .iter()
         .map(|s| {
@@ -60,27 +57,6 @@ pub fn build(
         ),
         removable: false,
     }));
-    rows.push(Row {
-        kind: "autostart",
-        group: "General",
-        id: String::new(),
-        title: "Start with the session".to_owned(),
-        detail: match autostart {
-            Some(true) => "On \u{b7} press Enter to turn off",
-            Some(false) => "Off \u{b7} press Enter to turn on",
-            None => "Not available on this desktop",
-        }
-        .to_owned(),
-        removable: false,
-    });
-    rows.push(Row {
-        kind: "shortcut",
-        group: "General",
-        id: String::new(),
-        title: "Global shortcut".to_owned(),
-        detail: "Press Enter to set it in the desktop's shortcut settings".to_owned(),
-        removable: false,
-    });
     rows
 }
 
@@ -113,7 +89,6 @@ mod tests {
                 status("ollama", false, false, true),
             ],
             &[],
-            Some(false),
         );
         let details: Vec<&str> = rows.iter().take(5).map(|r| r.detail.as_str()).collect();
         assert_eq!(
@@ -137,24 +112,22 @@ mod tests {
                 status("o", false, false, true),
             ],
             &[],
-            None,
         );
         let removable: Vec<bool> = rows.iter().take(3).map(|r| r.removable).collect();
         assert_eq!(removable, [true, false, false]);
     }
 
     #[test]
-    fn the_general_rows_follow_the_connections() {
-        let rows = build(&[status("a", true, false, true)], &[], Some(true));
+    fn the_page_has_connections_and_mcp_servers_and_nothing_general() {
+        let rows = build(&[status("a", true, false, true)], &[]);
         let kinds: Vec<&str> = rows.iter().map(|r| r.kind).collect();
-        assert_eq!(kinds, ["provider", "autostart", "shortcut"]);
-        assert!(rows[1].detail.starts_with("On"));
-        assert!(build(&[], &[], None)[0].detail.contains("Not available"));
+        assert_eq!(kinds, ["provider"]);
+        assert!(rows.iter().all(|r| r.group != "General"));
     }
 
     #[test]
     fn the_json_carries_what_the_interface_reads() {
-        let json = to_json(&build(&[status("a", true, false, true)], &[], Some(false)));
+        let json = to_json(&build(&[status("a", true, false, true)], &[]));
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         for key in ["kind", "group", "id", "title", "detail", "removable"] {
             assert!(parsed[0].get(key).is_some(), "{key} in {json}");
@@ -171,7 +144,7 @@ mod tests {
             args: vec!["-y".into(), "srv".into()],
             env: [("API_KEY".to_owned(), "sk-secret".to_owned())].into(),
         };
-        let rows = build(&[], &[(server.clone(), false), (server, true)], None);
+        let rows = build(&[], &[(server.clone(), false), (server, true)]);
         assert_eq!(rows[0].kind, "mcp");
         assert!(rows[0].detail.starts_with("Off"), "{}", rows[0].detail);
         assert!(rows[1].detail.starts_with("On"), "{}", rows[1].detail);

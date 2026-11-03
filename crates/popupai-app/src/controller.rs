@@ -95,11 +95,6 @@ pub mod qobject {
         #[cxx_name = "disconnectProvider"]
         fn disconnect_provider(self: Pin<&mut PopupController>, provider: &QString);
 
-        /// Turn "start with the session" on or off.
-        #[qinvokable]
-        #[cxx_name = "toggleAutostart"]
-        fn toggle_autostart(self: Pin<&mut PopupController>);
-
         /// Fill `modelsJson` with the models that can be picked.
         #[qinvokable]
         #[cxx_name = "loadModels"]
@@ -142,8 +137,8 @@ use cxx_qt_lib::QString;
 use popupai_core::markdown;
 use popupai_core::orchestrator::Event;
 use popupai_core::state::{ModelRef, UserState};
+use popupai_platform::Command;
 use popupai_platform::shortcut::ShortcutStatus;
-use popupai_platform::{Autostart, Command};
 use popupai_security::Secret;
 use zeroize::Zeroizing;
 
@@ -513,40 +508,6 @@ impl qobject::PopupController {
         });
     }
 
-    fn toggle_autostart(self: Pin<&mut Self>) {
-        let Some(app) = context::get() else {
-            return;
-        };
-        let orchestrator = app.orchestrator.clone();
-        let config_path = app.config_path.clone();
-        let qt_thread = self.qt_thread();
-        app.runtime.spawn_blocking(move || {
-            if let Some(autostart) = Autostart::user() {
-                let on = !autostart.is_enabled();
-                let applied = if on {
-                    std::env::current_exe().and_then(|exe| autostart.enable(&exe))
-                } else {
-                    autostart.disable()
-                };
-                match applied {
-                    Ok(()) => {
-                        tracing::info!(enabled = on, "autostart entry updated");
-                        // Keep the setting in step, so the next start does not undo it.
-                        if let Some(path) = config_path {
-                            let mut config = orchestrator.config();
-                            config.general.launch_at_startup = on;
-                            if let Err(err) = config.save(&path) {
-                                tracing::warn!("could not save the setting: {err}");
-                            }
-                        }
-                    }
-                    Err(err) => tracing::warn!("could not update the autostart entry: {err}"),
-                }
-            }
-            let _ = qt_thread.queue(|controller| controller.load_settings());
-        });
-    }
-
     /// Build the settings rows off the Qt thread (the wallet is asked for each key).
     fn load_settings(self: Pin<&mut Self>) {
         let Some(app) = context::get() else {
@@ -557,7 +518,6 @@ impl qobject::PopupController {
         let qt_thread = self.qt_thread();
         app.runtime.spawn(async move {
             let status = orchestrator.connection_status().await;
-            let autostart = Autostart::user().map(|a| a.is_enabled());
             // Found each time the page opens, so a server added since shows up. Read-only.
             let state = UserState::load(&state_path);
             let found = mcp_setup::detect();
@@ -568,7 +528,7 @@ impl qobject::PopupController {
                     (server, on)
                 })
                 .collect();
-            let json = settings_page::to_json(&settings_page::build(&status, &mcp, autostart));
+            let json = settings_page::to_json(&settings_page::build(&status, &mcp));
             let _ = qt_thread.queue(move |mut controller| {
                 controller
                     .as_mut()

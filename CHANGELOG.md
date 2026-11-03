@@ -44,9 +44,9 @@ All notable changes are documented here. The format follows
   a send button that appears once there is text, and animated thinking dots. Checked by loading
   the interface headlessly; **not yet looked at on screen**.
 
-- Settings page (Ctrl+, or the gear; Ctrl+A in the model picker): connection state of each
-  provider, connect, disconnect (removes the stored credential), start with the session, and the
-  global shortcut. The rows and their wording are unit-tested; the page has not been looked at on
+- Settings page (Ctrl+,; Ctrl+A in the model picker): connection state of each provider, connect, disconnect
+  (removes the stored credential) and the MCP servers. Ctrl+P goes round chat, models and settings; typing
+  `/` lists the commands (`/help`, `/shortcuts`, `/models`, `/settings`). The rows and their wording are unit-tested; the page has not been looked at on
   screen.
 
 - The model is told which system it runs on (distribution and version, kernel, architecture, desktop,

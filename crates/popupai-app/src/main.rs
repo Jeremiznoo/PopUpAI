@@ -139,9 +139,6 @@ fn main() -> ExitCode {
         Ok(config) => (config.with_missing_builtins(), String::new()),
         Err(err) => (Config::default(), format!("Configuration problem: {err}")),
     };
-    // The settings file is only written back when it was read successfully, so a broken
-    // file is never overwritten with defaults.
-    let config_writable = notice.is_empty();
     init_logging(config.logging.level);
     tracing::info!(config = %path.display(), providers = config.providers.len(), "starting");
     if has_instance {
@@ -257,7 +254,6 @@ fn main() -> ExitCode {
         runtime: runtime.handle().clone(),
         notice,
         state_path,
-        config_path: config_writable.then_some(path),
         start_visible,
         exit_on_dismiss: std::env::var_os("POPUPAI_EXIT_ON_DISMISS").is_some_and(|v| v == "1"),
         events,

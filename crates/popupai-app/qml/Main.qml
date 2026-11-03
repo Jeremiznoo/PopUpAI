@@ -18,7 +18,8 @@ Window {
     property bool pickerOpen: false
     property bool settingsOpen: false
     property var allSettings: []
-    readonly property bool overlayOpen: pickerOpen || settingsOpen
+    property bool helpOpen: false
+    readonly property bool overlayOpen: pickerOpen || settingsOpen || helpOpen
 
     // The identity of the application (branding/BRAND.md): the gradient of the logo, one
     // coral spark, and a violet that reads on both light and dark system themes.
@@ -100,8 +101,59 @@ Window {
             settingsList.currentIndex = settingsModel.count > 0 ? 0 : -1
     }
 
+    function openHelp() {
+        pickerOpen = false
+        settingsOpen = false
+        helpOpen = true
+        helpKeys.forceActiveFocus()
+    }
+
+    function closeHelp() {
+        helpOpen = false
+        focusField()
+    }
+
+    // Ctrl+P goes round the views: chat, models, settings, and back to the chat.
+    function nextView() {
+        if (helpOpen)
+            closeHelp()
+        else if (settingsOpen)
+            closeSettings()
+        else if (pickerOpen)
+            openSettings()
+        else
+            openPicker()
+    }
+
+    // A line starting with "/" is a command, not a question.
+    readonly property var commands: [
+        { name: "/help", detail: "Keyboard shortcuts and commands" },
+        { name: "/shortcuts", detail: "Same as /help" },
+        { name: "/models", detail: "Choose the model (Ctrl+P)" },
+        { name: "/settings", detail: "Connections and MCP servers (Ctrl+P twice)" }
+    ]
+
+    function matchingCommands() {
+        const typed = input.text.trim().toLowerCase()
+        return commands.filter(c => c.name.indexOf(typed) === 0)
+    }
+
+    function runCommand() {
+        const typed = input.text.trim().toLowerCase()
+        const found = commands.find(c => c.name === typed) || matchingCommands()[0]
+        input.text = ""
+        const name = found ? found.name : "/help"
+        if (name === "/models")
+            openPicker()
+        else if (name === "/settings")
+            openSettings()
+        else
+            openHelp()
+    }
+
     function openSettings() {
         pickerOpen = false
+        helpOpen = false
         controller.loadSettings()
         settingsOpen = true
         rebuildSettings()
@@ -122,10 +174,6 @@ Window {
             closeSettings()
         } else if (row.kind === "mcp") {
             controller.toggleMcp(row.id)
-        } else if (row.kind === "autostart") {
-            controller.toggleAutostart()
-        } else if (row.kind === "shortcut") {
-            controller.configureShortcut()
         }
     }
 
@@ -139,6 +187,7 @@ Window {
 
     function openPicker() {
         settingsOpen = false
+        helpOpen = false
         controller.loadModels()
         searchInput.text = ""
         pickerOpen = true
@@ -184,6 +233,7 @@ Window {
         wasActive = false
         pickerOpen = false
         settingsOpen = false
+        helpOpen = false
         keyInput.text = ""
         if (oneShot)
             Qt.quit()
@@ -252,6 +302,7 @@ Window {
     Shortcut {
         sequence: "Esc"
         onActivated: controller.permissionCommand.length > 0 ? controller.answerPermission(false)
+                     : popup.helpOpen ? popup.closeHelp()
                      : popup.settingsOpen ? popup.closeSettings()
                      : popup.pickerOpen ? popup.closePicker() : popup.closePopup("escape")
     }
@@ -261,7 +312,7 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+P"
-        onActivated: popup.pickerOpen ? popup.closePicker() : popup.openPicker()
+        onActivated: popup.nextView()
     }
     Shortcut { sequence: "Ctrl+R"; onActivated: controller.resume() }
     Shortcut { sequence: "Ctrl+."; onActivated: controller.stop() }
@@ -548,6 +599,22 @@ Window {
                 color: Qt.alpha(palette.windowText, 0.6)
             }
 
+            // Commands typed after "/": the ones that match, Tab completes, Enter runs.
+            Column {
+                visible: !controller.needsKey && input.text.trim().indexOf("/") === 0
+                width: parent.width
+                spacing: 2
+                Repeater {
+                    model: popup.matchingCommands()
+                    Row {
+                        required property var modelData
+                        spacing: 10
+                        Text { text: modelData.name; font.pixelSize: 13; font.bold: true; color: popup.accentText }
+                        Text { text: modelData.detail; font.pixelSize: 12; color: Qt.alpha(palette.windowText, 0.6) }
+                    }
+                }
+            }
+
             // The model wants to run a command that is not a plain read: show all of it and wait.
             Rectangle {
                 id: permissionBox
@@ -749,8 +816,17 @@ Window {
                     }
 
                     Keys.onPressed: event => {
-                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                                && !(event.modifiers & Qt.ShiftModifier)) {
+                        const isEnter = (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                && !(event.modifiers & Qt.ShiftModifier)
+                        if (isEnter && input.text.trim().indexOf("/") === 0) {
+                            popup.runCommand()
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Tab && input.text.trim().indexOf("/") === 0
+                                   && popup.matchingCommands().length > 0) {
+                            input.text = popup.matchingCommands()[0].name
+                            input.cursorPosition = input.text.length
+                            event.accepted = true
+                        } else if (isEnter) {
                             popup.submit()
                             event.accepted = true
                         }
@@ -827,6 +903,92 @@ Window {
                         text: "Copy"
                         onClicked: popup.copyAnswer()
                     }
+                }
+            }
+        }
+
+        // Help (/help or /shortcuts): every key, in one place.
+        Item {
+            id: helpView
+            visible: popup.helpOpen
+            anchors.fill: parent
+            anchors.margins: 14
+
+            Item {
+                id: helpHeader
+                width: parent.width
+                height: 20
+                BrandMark { id: helpMark; side: 18; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    anchors.left: helpMark.right
+                    anchors.leftMargin: 8
+                    text: "Shortcuts"
+                    font.bold: true
+                    font.pixelSize: 13
+                    color: palette.windowText
+                }
+                Text {
+                    anchors.right: parent.right
+                    text: "esc"
+                    font.pixelSize: 12
+                    color: Qt.alpha(palette.windowText, 0.5)
+                }
+            }
+
+            Item { id: helpKeys; anchors.fill: parent; focus: popup.helpOpen }
+
+            Flickable {
+                anchors {
+                    top: helpHeader.bottom
+                    topMargin: 8
+                    bottom: parent.bottom
+                    left: parent.left
+                    right: parent.right
+                }
+                clip: true
+                contentHeight: helpRows.implicitHeight
+                interactive: contentHeight > height
+
+                Column {
+                    id: helpRows
+                    width: parent.width
+                    spacing: 3
+
+                    component Heading: Text {
+                        width: helpRows.width
+                        topPadding: 8
+                        font.bold: true
+                        font.pixelSize: 12
+                        color: popup.accentText
+                    }
+                    component Line: Row {
+                        property string keys
+                        property string what
+                        spacing: 10
+                        Text { width: 120; text: parent.keys; font.pixelSize: 12; font.bold: true; color: palette.windowText }
+                        Text { width: helpRows.width - 130; text: parent.what; font.pixelSize: 12; wrapMode: Text.Wrap; color: Qt.alpha(palette.windowText, 0.75) }
+                    }
+
+                    Heading { text: "Chat" }
+                    Line { keys: "Enter"; what: "Send" }
+                    Line { keys: "Shift+Enter"; what: "New line" }
+                    Line { keys: "/"; what: "Commands: /help, /shortcuts, /models, /settings (Tab completes)" }
+                    Line { keys: "Ctrl+."; what: "Stop the answer" }
+                    Line { keys: "Ctrl+R"; what: "Bring back an answer that finished in the background" }
+                    Line { keys: "Ctrl+Shift+C"; what: "Copy the answer" }
+                    Line { keys: "Esc"; what: "Close the popup (or the open page)" }
+                    Heading { text: "Views" }
+                    Line { keys: "Ctrl+P"; what: "Next view: chat, models, settings, then back to the chat" }
+                    Line { keys: "Ctrl+,"; what: "Settings" }
+                    Heading { text: "Models" }
+                    Line { keys: "Up / Down, Enter"; what: "Move and choose; type to search or to use any model name" }
+                    Line { keys: "Ctrl+F"; what: "Favourite" }
+                    Line { keys: "Ctrl+A"; what: "Connect a provider" }
+                    Heading { text: "Settings" }
+                    Line { keys: "Enter"; what: "Connect a provider, or turn an MCP server on or off" }
+                    Line { keys: "Del"; what: "Disconnect a provider" }
+                    Heading { text: "A command the model asks to run" }
+                    Line { keys: "Enter / Esc"; what: "Run it / do not run it" }
                 }
             }
         }
