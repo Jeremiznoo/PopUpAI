@@ -15,9 +15,10 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
+use popupai_ai::chatgpt_login::{self, DeviceCode, Poll, Tokens};
 use popupai_ai::{
-    AnthropicProvider, ChatMessage, ChatRequest, GeminiProvider, OllamaProvider, OpenAiFlavor,
-    OpenAiProvider, Provider, ProviderConfig, ProviderError, Role as AiRole,
+    AnthropicProvider, ChatGptProvider, ChatMessage, ChatRequest, GeminiProvider, OllamaProvider,
+    OpenAiFlavor, OpenAiProvider, Provider, ProviderConfig, ProviderError, Role as AiRole,
 };
 use popupai_security::{Endpoint, Secret, SecretStore, StoreError};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -110,6 +111,7 @@ impl ProviderFactory for DefaultProviderFactory {
             ProviderKind::Anthropic => Arc::new(AnthropicProvider::new(config)?),
             ProviderKind::Gemini => Arc::new(GeminiProvider::new(config)?),
             ProviderKind::Ollama => Arc::new(OllamaProvider::new(config)?),
+            ProviderKind::ChatGpt => Arc::new(ChatGptProvider::new(config)?),
         })
     }
 }
@@ -201,6 +203,17 @@ impl Inner {
     }
 }
 
+/// Why signing in did not complete.
+#[derive(Debug, thiserror::Error)]
+pub enum SignInError {
+    #[error("the sign-in did not complete: {0}")]
+    Provider(#[from] ProviderError),
+    #[error("the sign-in could not be saved: {0}")]
+    Credentials(#[from] CredentialError),
+    #[error("the sign-in was not confirmed in time")]
+    TimedOut,
+}
+
 /// One provider as the popup shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderInfo {
@@ -211,6 +224,8 @@ pub struct ProviderInfo {
     pub requires_key: bool,
     /// The model the next question would use (empty: the server's smallest, for Ollama).
     pub model: String,
+    /// The credential comes from signing in in a browser rather than from a pasted key.
+    pub signs_in: bool,
 }
 
 /// A model that can be picked in the popup.
@@ -243,6 +258,7 @@ fn info_of(entry: &ProviderEntry, picked: Option<&str>) -> ProviderInfo {
         },
         requires_key: entry.kind.requires_key(),
         model: model.to_owned(),
+        signs_in: entry.kind.signs_in(),
     }
 }
 
@@ -591,6 +607,62 @@ impl Orchestrator {
         blocking(move || credentials::has_key(&*store, &id)).await
     }
 
+    /// Start signing in with the current provider's account (ChatGPT): returns the code
+    /// to show to the user and the page where to type it.
+    pub async fn begin_sign_in(&self) -> Result<DeviceCode, SignInError> {
+        let client = chatgpt_login::http_client(Duration::from_secs(30))?;
+        Ok(chatgpt_login::request_device_code(&client, chatgpt_login::DEFAULT_ISSUER).await?)
+    }
+
+    /// Wait until the user has confirmed in the browser, then store the tokens for
+    /// `provider_id`. Gives up after 15 minutes. Dropping the future cancels it.
+    pub async fn complete_sign_in(
+        &self,
+        provider_id: &str,
+        code: &DeviceCode,
+    ) -> Result<(), SignInError> {
+        let origin = {
+            let state = self.inner.state();
+            let entry = state
+                .config
+                .provider(provider_id)
+                .ok_or_else(|| CredentialError::UnknownProvider(provider_id.to_owned()))?;
+            entry
+                .endpoint()
+                .map_err(|e| CredentialError::InvalidEndpoint(e.to_string()))?
+                .origin()
+        };
+        let client = chatgpt_login::http_client(Duration::from_secs(30))?;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15 * 60);
+        let (authorization_code, code_verifier) = loop {
+            match chatgpt_login::poll(&client, chatgpt_login::DEFAULT_ISSUER, code).await? {
+                Poll::Confirmed {
+                    authorization_code,
+                    code_verifier,
+                } => break (authorization_code, code_verifier),
+                Poll::Pending => {
+                    if tokio::time::Instant::now() + code.interval > deadline {
+                        return Err(SignInError::TimedOut);
+                    }
+                    tokio::time::sleep(code.interval).await;
+                }
+            }
+        };
+        let tokens = chatgpt_login::exchange(
+            &client,
+            chatgpt_login::DEFAULT_ISSUER,
+            &authorization_code,
+            &code_verifier,
+        )
+        .await?;
+        let (store, id) = (self.inner.store.clone(), provider_id.to_owned());
+        let secret = tokens.to_secret();
+        blocking(move || credentials::save_key(&*store, &id, &origin, &secret)).await?;
+        self.inner.state().rejected_keys.remove(provider_id);
+        self.invalidate_credentials(provider_id);
+        Ok(())
+    }
+
     /// Forget the cached provider so its key is read again on next use.
     pub fn invalidate_credentials(&self, provider_id: &str) {
         self.inner.state().providers.remove(provider_id);
@@ -719,8 +791,11 @@ async fn provider_for_entry(
     entry: &ProviderEntry,
     timeout: Duration,
 ) -> Result<Arc<dyn Provider>, RequestError> {
+    let signs_in = entry.kind.signs_in();
+    // A sign-in expires within the hour and renews itself, so its provider is rebuilt
+    // for each request instead of being cached.
     let cached = inner.state().providers.get(&entry.id).cloned();
-    if let Some(provider) = cached {
+    if !signs_in && let Some(provider) = cached {
         return Ok(provider);
     }
     let endpoint = entry.endpoint().map_err(ProviderError::from)?;
@@ -739,12 +814,48 @@ async fn provider_for_entry(
         }
         Err(err) => return Err(err.into()),
     };
+    let key = if signs_in {
+        match key {
+            Some(stored) => Some(renewed_sign_in(inner, entry, &origin_of(entry)?, stored).await?),
+            None => None,
+        }
+    } else {
+        key
+    };
     let provider = inner.factory.build(entry, endpoint, key, timeout)?;
-    inner
-        .state()
-        .providers
-        .insert(entry.id.clone(), provider.clone());
+    if !signs_in {
+        inner
+            .state()
+            .providers
+            .insert(entry.id.clone(), provider.clone());
+    }
     Ok(provider)
+}
+
+fn origin_of(entry: &ProviderEntry) -> Result<String, RequestError> {
+    Ok(entry.endpoint().map_err(ProviderError::from)?.origin())
+}
+
+/// A sign-in whose access token is about to expire is renewed first, and the renewed
+/// tokens are stored (the server may rotate the refresh token, so keeping the old one
+/// would lock the user out). A refusal means the user has to sign in again.
+async fn renewed_sign_in(
+    inner: &Arc<Inner>,
+    entry: &ProviderEntry,
+    origin: &str,
+    stored: Secret,
+) -> Result<Secret, RequestError> {
+    let tokens = Tokens::from_secret(&stored)?;
+    if !tokens.expires_within(Duration::from_secs(120)) {
+        return Ok(stored);
+    }
+    let client = chatgpt_login::http_client(Duration::from_secs(30))?;
+    let renewed = chatgpt_login::refresh(&client, chatgpt_login::DEFAULT_ISSUER, &tokens).await?;
+    let secret = renewed.to_secret();
+    let (store, id, origin) = (inner.store.clone(), entry.id.clone(), origin.to_owned());
+    let to_store = secret.clone();
+    blocking(move || credentials::save_key(&*store, &id, &origin, &to_store)).await?;
+    Ok(secret)
 }
 
 #[cfg(test)]
@@ -1369,6 +1480,7 @@ mod tests {
                     "Gemini \u{b7} gemini-3.5-flash-lite".into(),
                     true
                 ),
+                ("chatgpt".into(), "ChatGPT \u{b7} gpt-6-luna".into(), true),
                 ("ollama".into(), "Ollama".into(), false),
             ]
         );
@@ -1381,8 +1493,8 @@ mod tests {
         let seen: Vec<String> = (0..5)
             .map(|_| h.orch.cycle_provider().unwrap().id)
             .collect();
-        assert_eq!(seen, ["openai", "gemini", "ollama", "anthropic", "openai"]);
-        assert_eq!(h.orch.current_provider().unwrap().id, "openai");
+        assert_eq!(seen, ["openai", "gemini", "chatgpt", "ollama", "anthropic"]);
+        assert_eq!(h.orch.current_provider().unwrap().id, "anthropic");
         assert!(harness(Config::default()).orch.cycle_provider().is_none());
     }
 
@@ -1556,6 +1668,7 @@ mod tests {
                 ("anthropic", "claude-haiku-5-5"),
                 ("openai", "gpt-6-luna"),
                 ("gemini", "gemini-3.5-flash-lite"),
+                ("chatgpt", "gpt-6-luna"),
             ],
             "Ollama contributes only what its server lists"
         );

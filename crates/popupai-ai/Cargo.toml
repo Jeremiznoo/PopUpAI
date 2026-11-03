@@ -10,12 +10,16 @@ workspace = true
 
 [dependencies]
 popupai-security = { path = "../popupai-security" }
+base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 reqwest.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 url.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }

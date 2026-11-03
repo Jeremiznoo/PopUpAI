@@ -19,6 +19,10 @@ exercised · ⬜ planned, not started · ❌ not supported.
 | Autostart | 🟡 XDG autostart entry written and removed (tested on a temporary folder); **not verified that Plasma starts it at login** | 🟡 same | 🟡 same | ⬜ | ⬜ |
 | Multi-monitor and mixed scaling | ⬜ dev machine has one output | ⬜ | ⬜ | ⬜ | ⬜ |
 
+**ChatGPT sign-in:** implemented from the Codex CLI's published flow and tested against a
+scripted server (5 end-to-end tests, 8 unit tests). **Never run against OpenAI.** Its headers,
+accepted models and the `gpt-6-luna` default for it are unverified.
+
 ## Spike log
 
 Observations from [spikes/s1-layer-shell](../spikes/s1-layer-shell/README.md), on KDE

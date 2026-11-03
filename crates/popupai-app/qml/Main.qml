@@ -79,7 +79,9 @@ Window {
     }
 
     function focusField() {
-        if (controller.needsKey)
+        if (controller.needsKey && controller.signsIn)
+            signInBox.forceActiveFocus()
+        else if (controller.needsKey)
             keyInput.forceActiveFocus()
         else
             input.forceActiveFocus()
@@ -346,11 +348,38 @@ Window {
             // The one thing that is always there: the field.
             Rectangle {
                 width: parent.width
-                height: Math.min(120, Math.max(38, (controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
+                height: Math.min(120, Math.max(38, (controller.needsKey && controller.signsIn ? signInLabel.implicitHeight : controller.needsKey ? keyInput.implicitHeight : input.contentHeight) + 18))
                 radius: 8
                 color: palette.base
-                border.color: (input.activeFocus || keyInput.activeFocus)
+                border.color: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus)
                     ? palette.highlight : Qt.alpha(palette.windowText, 0.2)
+
+                // For a provider used through an account (ChatGPT): Enter starts the
+                // sign-in, which is confirmed in the browser.
+                Item {
+                    id: signInBox
+                    visible: controller.needsKey && controller.signsIn
+                    anchors.fill: parent
+                    anchors.margins: 9
+
+                    Text {
+                        id: signInLabel
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: controller.signInText.length > 0
+                            ? controller.signInText + " \u2014 waiting for your confirmation in the browser\u2026"
+                            : "Press Enter to sign in with your ChatGPT account"
+                        font.pixelSize: 13
+                        color: palette.text
+                    }
+
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            controller.signIn()
+                            event.accepted = true
+                        }
+                    }
+                }
 
                 TextEdit {
                     id: input
@@ -383,7 +412,7 @@ Window {
                 // that is not stored yet. Masked, and handed straight to the secret store.
                 TextInput {
                     id: keyInput
-                    visible: controller.needsKey
+                    visible: controller.needsKey && !controller.signsIn
                     anchors.fill: parent
                     anchors.margins: 9
                     verticalAlignment: TextInput.AlignVCenter
@@ -420,7 +449,7 @@ Window {
                     anchors.right: actions.left
                     anchors.rightMargin: 8
                     elide: Text.ElideRight
-                    text: controller.needsKey
+                    text: controller.needsKey && !controller.signsIn
                         ? controller.providerLabel + " · key goes to the system wallet"
                         : controller.providerLabel
                     onClicked: popup.openPicker()

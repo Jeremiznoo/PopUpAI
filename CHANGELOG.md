@@ -36,6 +36,10 @@ All notable changes are documented here. The format follows
   The popup widens towards a square as the answer grows. Both are covered by unit tests of
   their logic and a headless load of the interface; **not yet looked at on screen**.
 
+- Experimental *Sign in with ChatGPT* (device code flow, token renewal, Responses stream)
+  for subscription use without an API key. Tested against a scripted server only; relies on an
+  undocumented backend and may not be permitted by OpenAI's terms.
+
 ### Fixed (since the first popup)
 
 - Google reports a wrong API key as HTTP 400, which was shown as a generic error; it is now an

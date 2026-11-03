@@ -67,6 +67,17 @@ the key you paste goes straight to the system secret store (KDE Wallet, GNOME Ke
 KeePassXC) and is never written to a file. Local models are never downloaded for you:
 install one yourself, for example `ollama pull llama3.2:1b`.
 
+**Sign in with ChatGPT (experimental).** Instead of an API key you can use a ChatGPT
+subscription: pick *ChatGPT* in the model picker (Ctrl+P), press Enter, and PopUpAI shows a
+code and opens `auth.openai.com/codex/device`; sign in there and confirm. You may first have
+to enable device-code sign-in in your ChatGPT security settings. The password is never seen
+by PopUpAI; the tokens go to the system wallet and are renewed automatically. **This uses
+the flow of OpenAI's Codex CLI and an undocumented backend, which OpenAI can change or
+withdraw, and its use by third-party applications may not be allowed by OpenAI's terms: check
+them before relying on it. It has only been tested against a scripted local server, never
+against OpenAI: your first sign-in is its first real test.** Anthropic restricts the use of
+Claude subscriptions by third-party applications, so there is no equivalent for Claude.
+
 **What is verified, and what is not.** Against a scripted local server: all four adapters,
 streaming, cancellation and error mapping. Against the **real** services on 2026-11-02:
 Ollama answers end to end (local `llama3.2:1b`); and Anthropic, OpenAI and Google each

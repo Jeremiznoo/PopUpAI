@@ -16,6 +16,7 @@ publish = false
 
 [workspace.dependencies]
 ashpd = { version = "0.13", default-features = false, features = ["tokio", "global_shortcuts"] }
+base64 = "0.22"
 bytes = "1"
 futures-util = "0.3"
 # Default TLS is rustls; `system-proxy` stays on so corporate proxies work.

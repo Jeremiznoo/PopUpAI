@@ -71,6 +71,9 @@ impl RequestError {
 
 fn provider_message(err: &ProviderError, provider: Option<&ProviderEntry>, name: &str) -> String {
     match err {
+        ProviderError::Auth { .. } if provider.is_some_and(|p| p.kind.signs_in()) => {
+            format!("The {name} sign-in expired or was refused. Sign in again below.")
+        }
         ProviderError::Auth { .. } => {
             format!("{name} rejected the API key. Paste a new one below.")
         }

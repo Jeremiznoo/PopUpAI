@@ -193,6 +193,10 @@ pub enum ProviderKind {
     Gemini,
     #[serde(rename = "ollama")]
     Ollama,
+    /// A ChatGPT subscription, signed in with a device code (no API key). Experimental: it
+    /// uses an undocumented backend, see `popupai-ai`'s `oauth` module.
+    #[serde(rename = "chatgpt")]
+    ChatGpt,
     #[serde(rename = "openai-compatible")]
     OpenAiCompatible,
 }
@@ -205,6 +209,7 @@ impl ProviderKind {
             Self::Anthropic => Some("https://api.anthropic.com/v1"),
             Self::Gemini => Some("https://generativelanguage.googleapis.com/v1beta"),
             Self::Ollama => Some("http://127.0.0.1:11434"),
+            Self::ChatGpt => Some("https://chatgpt.com/backend-api/codex"),
             Self::OpenAiCompatible => None,
         }
     }
@@ -218,7 +223,7 @@ impl ProviderKind {
     pub fn default_model(self) -> &'static str {
         match self {
             Self::Anthropic => "claude-haiku-5-5",
-            Self::OpenAi => "gpt-6-luna",
+            Self::OpenAi | Self::ChatGpt => "gpt-6-luna",
             Self::Gemini => "gemini-3.5-flash-lite",
             Self::Ollama | Self::OpenAiCompatible => "",
         }
@@ -226,7 +231,15 @@ impl ProviderKind {
 
     /// Whether the service cannot be used without an API key.
     pub fn requires_key(self) -> bool {
-        matches!(self, Self::OpenAi | Self::Anthropic | Self::Gemini)
+        matches!(
+            self,
+            Self::OpenAi | Self::Anthropic | Self::Gemini | Self::ChatGpt
+        )
+    }
+
+    /// The credential is obtained by signing in in a browser, not by pasting a key.
+    pub fn signs_in(self) -> bool {
+        matches!(self, Self::ChatGpt)
     }
 }
 
@@ -414,6 +427,7 @@ impl Config {
                 entry("anthropic", ProviderKind::Anthropic, "Claude"),
                 entry("openai", ProviderKind::OpenAi, "OpenAI"),
                 entry("gemini", ProviderKind::Gemini, "Gemini"),
+                entry("chatgpt", ProviderKind::ChatGpt, "ChatGPT"),
                 entry("ollama", ProviderKind::Ollama, "Ollama"),
             ],
             ..Self::default()
@@ -880,6 +894,7 @@ mod tests {
                 ("anthropic", "claude-haiku-5-5"),
                 ("openai", "gpt-6-luna"),
                 ("gemini", "gemini-3.5-flash-lite"),
+                ("chatgpt", "gpt-6-luna"),
                 ("ollama", ""),
             ]
         );

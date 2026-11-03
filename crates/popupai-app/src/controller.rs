@@ -29,6 +29,8 @@ pub mod qobject {
         #[qproperty(bool, background_answer, cxx_name = "backgroundAnswer")]
         #[qproperty(bool, needs_key, cxx_name = "needsKey")]
         #[qproperty(bool, can_configure_shortcut, cxx_name = "canConfigureShortcut")]
+        #[qproperty(bool, signs_in, cxx_name = "signsIn")]
+        #[qproperty(QString, sign_in_text, cxx_name = "signInText")]
         #[qproperty(QString, models_json, cxx_name = "modelsJson")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
@@ -57,6 +59,11 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "configureShortcut"]
         fn configure_shortcut(self: Pin<&mut PopupController>);
+
+        /// Start signing in with the current provider's account (ChatGPT).
+        #[qinvokable]
+        #[cxx_name = "signIn"]
+        fn sign_in(self: Pin<&mut PopupController>);
 
         /// Fill `modelsJson` with the models that can be picked.
         #[qinvokable]
@@ -128,6 +135,9 @@ pub struct PopupControllerRust {
     needs_key: bool,
     can_configure_shortcut: bool,
     models_json: QString,
+    sign_in_text: QString,
+    signs_in: bool,
+    signing_in: bool,
     start_visible: bool,
     exit_on_dismiss: bool,
     model: ViewModel,
@@ -314,9 +324,12 @@ impl qobject::PopupController {
         let orchestrator = app.orchestrator.clone();
         let qt_thread = self.qt_thread();
         app.runtime.spawn(async move {
+            let signs_in = orchestrator.current_provider().is_some_and(|p| p.signs_in);
             let needs_key = orchestrator.current_needs_key().await;
-            let _ =
-                qt_thread.queue(move |mut controller| controller.as_mut().set_needs_key(needs_key));
+            let _ = qt_thread.queue(move |mut controller| {
+                controller.as_mut().set_signs_in(signs_in);
+                controller.as_mut().set_needs_key(needs_key);
+            });
         });
     }
 
@@ -325,6 +338,61 @@ impl qobject::PopupController {
             tracing::info!("opening the desktop shortcut settings");
             let _ = configure.send(());
         }
+    }
+
+    fn sign_in(mut self: Pin<&mut Self>) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        if self.rust().signing_in {
+            return;
+        }
+        let Some(provider) = app.orchestrator.current_provider() else {
+            return;
+        };
+        self.as_mut().rust_mut().get_mut().signing_in = true;
+        let orchestrator = app.orchestrator.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn(async move {
+            let outcome = async {
+                let code = orchestrator.begin_sign_in().await?;
+                let text = format!(
+                    "Open {} and enter the code {}",
+                    code.verification_url, code.user_code
+                );
+                let _ = qt_thread.queue(move |mut controller| {
+                    controller
+                        .as_mut()
+                        .set_sign_in_text(QString::from(text.as_str()));
+                });
+                // Open the page for the user. The address comes from the sign-in server
+                // for this code, and is passed as one argument, never to a shell.
+                open_in_browser(&code.verification_url);
+                orchestrator.complete_sign_in(&provider.id, &code).await
+            }
+            .await;
+            let _ = qt_thread.queue(move |mut controller| {
+                controller.as_mut().rust_mut().get_mut().signing_in = false;
+                controller.as_mut().set_sign_in_text(QString::from(""));
+                match outcome {
+                    Ok(()) => {
+                        tracing::info!("signed in");
+                        controller.as_mut().rust_mut().get_mut().model.clear_error();
+                        controller.as_mut().set_needs_key(false);
+                    }
+                    Err(err) => {
+                        tracing::warn!("sign-in did not complete");
+                        controller
+                            .as_mut()
+                            .rust_mut()
+                            .get_mut()
+                            .model
+                            .fail_locally(&format!("Sign-in failed: {err}."));
+                    }
+                }
+                controller.sync();
+            });
+        });
     }
 
     /// Build the picker list off the Qt thread (a local server may take a moment).
@@ -526,4 +594,18 @@ impl qobject::PopupController {
             self.sync();
         }
     }
+}
+
+/// Ask the desktop to open an address in the default browser. Only an `https` address is
+/// accepted, and it is handed to `xdg-open` as a single argument.
+fn open_in_browser(url: &str) {
+    if !url.starts_with("https://") || url.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return;
+    }
+    let _ = std::process::Command::new("xdg-open")
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }

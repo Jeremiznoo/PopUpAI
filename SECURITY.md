@@ -38,6 +38,16 @@ The full threat table is in
 - **Privacy:** no telemetry, analytics, screenshots or clipboard reads. History is
   off by default.
 
+## ChatGPT sign-in
+
+- The device-code flow means the password never reaches PopUpAI. The access and refresh
+  tokens are stored as one secret in the system wallet, bound to the provider's origin like an
+  API key, and the refresh token is only ever sent to the sign-in server, never to the API.
+- A renewed token set replaces the stored one (the server may rotate the refresh token).
+- The page opened for sign-in is handed to `xdg-open` as a single argument, only if it is an
+  `https` address without spaces or control characters.
+- It relies on an undocumented backend and may violate OpenAI's terms for third-party use.
+
 ## Known limits
 
 - The shortcut, tray and wallet code is tested against mocks written from the
