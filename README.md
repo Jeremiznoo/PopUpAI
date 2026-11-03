@@ -95,6 +95,14 @@ what you see.
 
 If a stored key is refused, the popup shows the key field again so you can paste a new one.
 
+## The model knows your system
+
+With each request PopUpAI tells the model which system it is on, so its commands fit: the
+distribution and version (from `/etc/os-release`), the kernel, the architecture, the desktop and
+session type, the shell, the language and the date. It never sends your user name, host name, home
+folder, network details or anything from your files. Turn it off with `share_system_info = false`
+under `[advanced]`. The model cannot run commands here: it is told to give you commands to run.
+
 ## Your questions are not logged
 
 Questions and answers are never written to the logs, to a file or to the clipboard on their own.

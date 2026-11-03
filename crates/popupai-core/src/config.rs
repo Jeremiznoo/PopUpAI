@@ -170,6 +170,10 @@ pub struct Advanced {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
     pub timeout_secs: u64,
+    /// Tell the model which system it is talking to (distribution and version, kernel,
+    /// architecture, desktop, shell, language, date) so its commands and advice fit.
+    /// See `system_info` for exactly what is sent.
+    pub share_system_info: bool,
 }
 
 impl Default for Advanced {
@@ -179,6 +183,7 @@ impl Default for Advanced {
             temperature: None,
             max_tokens: None,
             timeout_secs: 120,
+            share_system_info: true,
         }
     }
 }

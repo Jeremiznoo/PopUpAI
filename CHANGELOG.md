@@ -49,6 +49,9 @@ All notable changes are documented here. The format follows
   global shortcut. The rows and their wording are unit-tested; the page has not been looked at on
   screen.
 
+- The model is told which system it runs on (distribution and version, kernel, architecture, desktop,
+  shell, language, date) unless `advanced.share_system_info` is false. No identity or file data.
+
 ### Fixed (since the first popup)
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate

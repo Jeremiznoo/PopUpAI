@@ -768,6 +768,25 @@ struct SetupFailure {
     entry: Option<ProviderEntry>,
 }
 
+/// The user's own instructions, followed by the description of their system unless that was
+/// turned off. `None` when there is neither.
+fn instructions(advanced: &crate::config::Advanced) -> Option<String> {
+    let own = advanced
+        .system_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let system = advanced
+        .share_system_info
+        .then(crate::system_info::describe);
+    match (own, system) {
+        (Some(own), Some(system)) => Some(format!("{own}\n\n{system}")),
+        (Some(own), None) => Some(own.to_owned()),
+        (None, Some(system)) => Some(system),
+        (None, None) => None,
+    }
+}
+
 /// Capture everything a request needs while the state lock is held, so later
 /// settings changes cannot affect it.
 fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
@@ -814,10 +833,7 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
     let request = ChatRequest {
         model,
         messages,
-        system_prompt: advanced
-            .system_prompt
-            .clone()
-            .filter(|s| !s.trim().is_empty()),
+        system_prompt: instructions(advanced),
         temperature: entry.temperature.or(advanced.temperature),
         max_tokens: entry.max_tokens.or(advanced.max_tokens),
     };
@@ -1043,6 +1059,8 @@ mod tests {
             providers: vec![provider],
             advanced: Advanced {
                 system_prompt: Some("Be brief.".into()),
+                // The tests of the exact prompt do not want the system description added.
+                share_system_info: false,
                 ..Advanced::default()
             },
             ..Config::default()
@@ -1804,5 +1822,31 @@ mod tests {
         ] {
             assert!(!chat_model(other), "{other}");
         }
+    }
+
+    #[test]
+    fn the_system_description_follows_the_users_own_instructions_unless_turned_off() {
+        let mut advanced = Advanced {
+            system_prompt: Some("Be brief.".into()),
+            share_system_info: true,
+            ..Advanced::default()
+        };
+        let both = instructions(&advanced).unwrap();
+        assert!(
+            both.starts_with("Be brief.\n\nThe user's computer:"),
+            "{both}"
+        );
+
+        advanced.system_prompt = None;
+        assert!(
+            instructions(&advanced)
+                .unwrap()
+                .starts_with("The user's computer:")
+        );
+
+        advanced.share_system_info = false;
+        assert_eq!(instructions(&advanced), None);
+        advanced.system_prompt = Some("  ".into());
+        assert_eq!(instructions(&advanced), None);
     }
 }
