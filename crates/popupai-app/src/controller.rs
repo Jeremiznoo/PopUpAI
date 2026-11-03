@@ -39,6 +39,7 @@ pub mod qobject {
         #[qproperty(QString, settings_json, cxx_name = "settingsJson")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
+        #[qproperty(bool, exit_when_idle, cxx_name = "exitWhenIdle")]
         type PopupController = super::PopupControllerRust;
 
         /// The popup was shown: start a fresh session.
@@ -177,6 +178,7 @@ pub struct PopupControllerRust {
     signing_in: bool,
     start_visible: bool,
     exit_on_dismiss: bool,
+    exit_when_idle: bool,
     model: ViewModel,
 }
 
@@ -198,6 +200,7 @@ impl Initialize for qobject::PopupController {
         self.as_mut().refresh_notice();
         self.as_mut().set_start_visible(app.start_visible);
         self.as_mut().set_exit_on_dismiss(app.exit_on_dismiss);
+        self.as_mut().set_exit_when_idle(app.exit_when_idle);
         let status = QString::from(self.model_status());
         self.as_mut().set_status(status);
         self.as_mut().refresh_needs_key();

@@ -128,6 +128,17 @@ echo "7. a prompt on the command line is refused"
 timeout 10 "$bin" "what is DNS?" >"$tmp/arg.out" 2>&1
 check "it exits with code 2 and prints the usage" test $? -eq 2
 
+echo "8. on demand: the shortcut command starts PopUpAI, which quits once the popup is closed"
+ondemand_log="$tmp/ondemand.log"
+"$bin" --toggle >"$ondemand_log" 2>&1 &
+ondemand_pid=$!
+for _ in $(seq 1 60); do grep -q "popup opened" "$ondemand_log" && break; sleep 0.1; done
+check "nothing was running, so it started and showed the popup" grep -q "popup opened" "$ondemand_log"
+check "no tray icon and no portal shortcut are started" bash -c "! grep -qE 'tray icon shown|global shortcut' '$ondemand_log'"
+timeout 10 "$bin" --toggle
+for _ in $(seq 1 50); do kill -0 "$ondemand_pid" 2>/dev/null || break; sleep 0.1; done
+check "closing the popup ends the process" bash -c "! kill -0 $ondemand_pid 2>/dev/null"
+
 echo
 if [ "$failed" -eq 0 ]; then
     echo "All checks passed."

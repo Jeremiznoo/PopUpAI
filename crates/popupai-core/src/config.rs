@@ -67,6 +67,10 @@ pub enum Theme {
 pub struct General {
     pub shortcut: String,
     pub launch_at_startup: bool,
+    /// Keep running in the background so the application's own global shortcut works. Off by
+    /// default: the desktop's shortcut (see `popupai --setup-shortcut`) starts PopUpAI on demand
+    /// and it quits again when the popup is closed and nothing is being answered.
+    pub stay_running: bool,
     pub theme: Theme,
 }
 
@@ -75,6 +79,7 @@ impl Default for General {
         Self {
             shortcut: DEFAULT_SHORTCUT.to_owned(),
             launch_at_startup: false,
+            stay_running: false,
             theme: Theme::default(),
         }
     }

@@ -6,6 +6,7 @@ mod key_input;
 mod mcp_setup;
 mod picker;
 mod settings_page;
+mod setup;
 mod shortcut_notice;
 mod view_model;
 
@@ -66,6 +67,7 @@ fn main() -> ExitCode {
             print!("{}", cli::USAGE);
             return ExitCode::SUCCESS;
         }
+        Ok(Action::SetupShortcut) => return setup::run(),
         Ok(action) => action,
         Err(message) => {
             eprintln!("popupai: {message}\n\n{}", cli::USAGE);
@@ -98,7 +100,7 @@ fn main() -> ExitCode {
                 Action::Run { .. } => Command::Show,
                 Action::Toggle => Command::Toggle,
                 Action::Quit => Command::Quit,
-                Action::Help => return ExitCode::SUCCESS,
+                Action::Help | Action::SetupShortcut => return ExitCode::SUCCESS,
             };
             return match runtime.block_on(existing.send(command)) {
                 Ok(()) => ExitCode::SUCCESS,
@@ -166,6 +168,11 @@ fn main() -> ExitCode {
     let mut tray = None;
     let (configure_tx, configure_rx) = unbounded_channel();
     let mut shortcut_configure = None;
+    // Resident: started in the background (autostart) or asked to stay (`stay_running`). Otherwise
+    // PopUpAI runs on demand: the desktop's shortcut starts it, and it quits when the popup is
+    // closed and nothing is being answered. Only a resident instance holds the portal shortcut
+    // and the tray icon.
+    let resident = config.general.stay_running || !start_visible;
     let (commands, shortcut) = match commands {
         Some(mut remote) => {
             let (merged, merged_rx) = unbounded_channel();
@@ -177,7 +184,9 @@ fn main() -> ExitCode {
                     }
                 }
             });
-            if std::env::var_os("POPUPAI_NO_TRAY").is_some_and(|v| v == "1") {
+            if !resident {
+                tracing::info!("running on demand: no tray icon");
+            } else if std::env::var_os("POPUPAI_NO_TRAY").is_some_and(|v| v == "1") {
                 tracing::info!("tray icon disabled by POPUPAI_NO_TRAY");
             } else {
                 match runtime.block_on(popupai_platform::tray::spawn(merged.clone())) {
@@ -189,7 +198,9 @@ fn main() -> ExitCode {
                     Err(err) => tracing::warn!("{err}"),
                 }
             }
-            let shortcut = if std::env::var_os("POPUPAI_NO_SHORTCUT").is_some_and(|v| v == "1") {
+            let shortcut = if !resident {
+                None
+            } else if std::env::var_os("POPUPAI_NO_SHORTCUT").is_some_and(|v| v == "1") {
                 tracing::info!("global shortcut disabled by POPUPAI_NO_SHORTCUT");
                 None
             } else {
@@ -256,6 +267,7 @@ fn main() -> ExitCode {
         state_path,
         start_visible,
         exit_on_dismiss: std::env::var_os("POPUPAI_EXIT_ON_DISMISS").is_some_and(|v| v == "1"),
+        exit_when_idle: !resident,
         events,
         commands,
         shortcut,

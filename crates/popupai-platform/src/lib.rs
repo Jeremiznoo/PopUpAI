@@ -8,6 +8,7 @@ mod autostart;
 mod ipc;
 mod secret_service;
 pub mod shortcut;
+pub mod shortcut_setup;
 pub mod tray;
 
 pub use autostart::Autostart;

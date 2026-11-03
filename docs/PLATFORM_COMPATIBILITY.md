@@ -27,6 +27,25 @@ accepted models and the `gpt-6-luna` default for it are unverified.
 scripted providers), and the MCP client against a small real MCP server over pipes (3 tests). **Not run**
 against the ChatGPT backend's real tool calling, nor against the real MCP server found on this machine.
 
+## Other Linux desktops (written, not run)
+
+Only KDE Plasma 6 on Wayland has been run on a real session. The rest follows from the protocols and is
+**untested**:
+
+- **wlroots compositors (sway, Hyprland...)** implement the same `wlr-layer-shell` as the KDE path, so the
+  corner placement should work unchanged.
+- **GNOME on Wayland** has no layer-shell: the popup is an ordinary frameless window and the compositor places
+  it. The interface loads headlessly; where it appears is not controlled.
+- **X11** (any desktop): the popup is a frameless, always-on-top tool window placed in the bottom-right corner
+  of the available area. It was started once on XWayland to check that the interface loads, with no positioning
+  check.
+- **Shortcut:** the application no longer needs to stay running. `popupai --setup-shortcut` plans the
+  binding for KDE (`kglobalshortcutsrc`), GNOME (`gsettings`) and XFCE (`xfconf-query`) and prints a line for
+  sway, i3, Hyprland and others. The plans are unit-tested; **none was applied to a real desktop**, and the
+  KDE one in particular needs Plasma to reload its shortcuts.
+- **On demand:** headless checks show that `popupai --toggle` starts and shows the popup with nothing
+  running, and that the process ends when the popup is closed.
+
 ## Spike log
 
 Observations from [spikes/s1-layer-shell](../spikes/s1-layer-shell/README.md), on KDE

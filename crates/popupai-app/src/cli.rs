@@ -7,7 +7,9 @@ Usage: popupai [OPTION]
 
   (no option)    show the popup; start PopUpAI first if it is not running
   --toggle       show the popup if hidden, hide it if shown
-  --background   start hidden, for autostart at login
+  --background   start hidden and stay running, for autostart at login
+  --setup-shortcut
+                 bind your shortcut in the desktop, so it starts PopUpAI even when closed
   --quit         stop the running PopUpAI
   -h, --help     show this help
 
@@ -24,6 +26,7 @@ pub enum Action {
     Toggle,
     Quit,
     Help,
+    SetupShortcut,
 }
 
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
@@ -38,6 +41,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
         "--toggle" => Ok(Action::Toggle),
         "--background" => Ok(Action::Run { visible: false }),
         "--quit" => Ok(Action::Quit),
+        "--setup-shortcut" => Ok(Action::SetupShortcut),
         "-h" | "--help" => Ok(Action::Help),
         other => Err(format!("unknown option `{other}`")),
     }
@@ -64,6 +68,7 @@ mod tests {
             Ok(Action::Run { visible: false })
         );
         assert_eq!(parse_args(&["--quit"]), Ok(Action::Quit));
+        assert_eq!(parse_args(&["--setup-shortcut"]), Ok(Action::SetupShortcut));
         assert_eq!(parse_args(&["-h"]), Ok(Action::Help));
         assert_eq!(parse_args(&["--help"]), Ok(Action::Help));
     }

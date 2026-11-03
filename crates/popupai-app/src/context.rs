@@ -26,6 +26,8 @@ pub struct Parts {
     /// Development aid: quit when the popup is dismissed instead of staying
     /// resident (`POPUPAI_EXIT_ON_DISMISS=1`).
     pub exit_on_dismiss: bool,
+    /// Quit when the popup is closed and no answer is being written (the on-demand mode).
+    pub exit_when_idle: bool,
     pub events: UnboundedReceiver<Event>,
     /// Commands from later invocations (`--toggle`, `--quit`) and from the global
     /// shortcut.
@@ -43,6 +45,7 @@ pub struct AppContext {
     pub state_path: PathBuf,
     pub start_visible: bool,
     pub exit_on_dismiss: bool,
+    pub exit_when_idle: bool,
     pub shortcut_configure: Option<UnboundedSender<()>>,
     events: Mutex<Option<UnboundedReceiver<Event>>>,
     commands: Mutex<Option<UnboundedReceiver<Command>>>,
@@ -58,6 +61,7 @@ impl AppContext {
             state_path: parts.state_path,
             start_visible: parts.start_visible,
             exit_on_dismiss: parts.exit_on_dismiss,
+            exit_when_idle: parts.exit_when_idle,
             shortcut_configure: parts.shortcut_configure,
             events: Mutex::new(Some(parts.events)),
             commands: Mutex::new(parts.commands),

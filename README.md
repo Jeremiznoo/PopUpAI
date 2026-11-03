@@ -10,27 +10,30 @@ click elsewhere and it is gone. Each opening is a fresh, unsaved session.
 - **Your account or your key:** sign in with ChatGPT, use an API key, or point it at a local model.
 - **Keyboard first:** `Ctrl+P` goes round chat, models and settings; `/` lists the commands.
 - **Private by default:** no telemetry, nothing logged but metadata, keys only in the system wallet.
-- **Native:** Qt/QML with a Rust core, built for KDE Plasma on Wayland.
+- **Keyboard only:** nothing reacts to the mouse.
+- **Native:** Qt/QML with a Rust core; KDE Plasma on Wayland first, other Linux desktops on a best-effort basis (see below).
 
 ## Install
 
 ```bash
 tools/install-local.sh            # binary in ~/.local/bin, launcher and icon for your user
 tools/install-local.sh --remove
-popupai --background              # start it; use --toggle to show or hide the popup
+popupai --setup-shortcut          # bind Ctrl+Shift+Space in your desktop (asks before changing anything)
 ```
 
-The global shortcut needs the installed launcher (the desktop portal refuses an application it cannot
-identify). Default key: `Ctrl+Shift+Space`. On KDE the key is assigned by you: if the popup says it has
-none, click *Set the shortcut…*. Without a global shortcut, bind `popupai --toggle` in your system
-keyboard settings. To start with your session, set `launch_at_startup = true` under `[general]`.
+**PopUpAI does not stay running.** Your desktop's shortcut runs `popupai --toggle`: it starts, shows the
+popup, and quits again once the popup is closed and nothing is being answered. `--setup-shortcut` does the
+binding for KDE Plasma, GNOME and XFCE, and prints the line to paste for sway, i3, Hyprland and any other
+desktop. If you prefer an always-running instance (instant popup, tray icon, the shortcut registered through
+the desktop portal), set `stay_running = true` under `[general]`, or `launch_at_startup = true` to start it
+with your session.
 
 ## Use
 
 | Keys | |
 |---|---|
 | `Enter` / `Shift+Enter` | Send / new line |
-| `Ctrl+P` | Next view: chat → models → settings → chat |
+| `Ctrl+P` | Next view: chat → models → settings → chat; `→` goes back |
 | `/` | Commands: `/help`, `/shortcuts`, `/models`, `/settings` |
 | `Ctrl+F` (in models) | Favourite |
 | `Ctrl+.` / `Ctrl+R` | Stop / bring back an answer that finished in the background |
@@ -39,6 +42,18 @@ keyboard settings. To start with your session, set `launch_at_startup = true` un
 **Models** (`Ctrl+P`): search, recent and favourite models first, and any model name can be typed.
 **Settings** (`Ctrl+P` twice, or `Ctrl+,`): each provider's connection (connect with `Enter`,
 disconnect with `Del`) and the MCP servers found on your computer.
+
+## Desktops
+
+| Desktop | Placement | Shortcut |
+|---|---|---|
+| KDE Plasma (Wayland) | In the corner, over the panels (layer-shell) | `--setup-shortcut` (or the portal when resident) |
+| sway, Hyprland, other wlroots compositors | In the corner (layer-shell) | Line to paste, printed by `--setup-shortcut` |
+| GNOME (Wayland) | A frameless window; GNOME decides where it goes | `--setup-shortcut` |
+| Any X11 session | Frameless, always on top, bottom-right corner | `--setup-shortcut` (GNOME, XFCE, KDE) or paste |
+
+Only KDE Plasma on Wayland has been run on a real session; the others are written to work and are listed in
+[the compatibility notes](docs/PLATFORM_COMPATIBILITY.md).
 
 ## Providers
 

@@ -35,6 +35,16 @@ Window {
     // that a long answer is comfortable to read.
     readonly property int answerWidth: Math.min(640, 440 + Math.round(controller.answer.length * 0.25))
 
+    // Placement depends on the display server:
+    //  - Wayland with layer-shell (KDE Plasma, sway, Hyprland...): pinned to the corner by the
+    //    layer-shell properties below, over panels.
+    //  - X11 (any desktop): a frameless, always-on-top tool window that this file puts in the
+    //    bottom-right corner of the available area.
+    //  - Wayland without layer-shell (GNOME...): a frameless window; the compositor decides
+    //    where it goes.
+    readonly property bool isX11: Qt.platform.pluginName === "xcb"
+    flags: Qt.FramelessWindowHint | (isX11 ? (Qt.WindowStaysOnTopHint | Qt.Tool) : 0)
+
     visible: false
     // The window is 14 px larger than the card on every side, which is where the shadow lives.
     readonly property int shadowMargin: 14
@@ -55,6 +65,20 @@ Window {
     LayerShell.Window.margins.bottom: 4
     LayerShell.Window.exclusionZone: 0
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
+
+    // X11 only: keep the card in the bottom-right corner as the window grows.
+    Binding {
+        target: popup
+        property: "x"
+        value: Screen.virtualX + Screen.desktopAvailableWidth - popup.width - 4
+        when: popup.isX11
+    }
+    Binding {
+        target: popup
+        property: "y"
+        value: Screen.virtualY + Screen.desktopAvailableHeight - popup.height - 4
+        when: popup.isX11
+    }
 
     SystemPalette { id: palette }
     PopupController { id: controller }
@@ -227,6 +251,8 @@ Window {
         keyInput.text = ""
         wasActive = false
         visible = true
+        if (isX11)
+            requestActivate()
         appear.restart()
         focusField()
     }
@@ -239,6 +265,10 @@ Window {
         settingsOpen = false
         helpOpen = false
         keyInput.text = ""
+        // On demand, nothing keeps PopUpAI running once the popup is closed and no answer is
+        // still being written (that one finishes first, see onStatusChanged).
+        if (controller.exitWhenIdle && controller.status !== "streaming")
+            Qt.quit()
         if (oneShot)
             Qt.quit()
     }
@@ -356,6 +386,12 @@ Window {
         }
 
         // The list of models arrives asynchronously after Ctrl+P.
+        // An answer that finished while the popup was hidden: nothing left to wait for.
+        function onStatusChanged() {
+            if (!popup.visible && controller.exitWhenIdle && controller.status !== "streaming")
+                Qt.quit()
+        }
+
         // A command the model wants to run: the question is put to the user, and the
         // keyboard goes to the confirmation until it is answered.
         function onPermissionCommandChanged() {

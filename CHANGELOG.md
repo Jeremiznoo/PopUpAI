@@ -62,6 +62,12 @@ All notable changes are documented here. The format follows
   autostart entry, icon theme), the notification-area icon (embedded pixmaps), and is drawn in the popup,
   the model picker and the settings page, whose accents now use the brand colours.
 
+- On-demand operation: PopUpAI no longer needs to stay running. `popupai --toggle` starts it and shows the
+  popup, and it quits when the popup is closed and nothing is being answered (`stay_running = true` keeps the
+  old resident mode with the tray and the portal shortcut). `popupai --setup-shortcut` binds the shortcut in KDE,
+  GNOME or XFCE after asking, and prints a line for other desktops. The popup is placed for X11 and frameless
+  on Wayland without layer-shell. Everything is keyboard only.
+
 ### Fixed (since the first popup)
 
 - The model picker showed "undefined" everywhere: its model field was named `model`, which a QML delegate
