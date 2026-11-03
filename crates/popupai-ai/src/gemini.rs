@@ -186,6 +186,8 @@ impl GeminiParser {
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
+            // A part marked `thought` is the model's reasoning, not its answer.
+            .filter(|part| part.get("thought").and_then(Value::as_bool) != Some(true))
             .filter_map(|part| part.get("text").and_then(Value::as_str))
             .collect();
         if !text.is_empty() {
@@ -277,6 +279,16 @@ mod tests {
 
     fn texts(items: Vec<Result<String, ProviderError>>) -> Vec<String> {
         items.into_iter().map(|r| r.unwrap()).collect()
+    }
+
+    #[test]
+    fn reasoning_parts_are_not_shown_as_the_answer() {
+        let stream = concat!(
+            "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Let me think about it.\",\"thought\":true},{\"text\":\"Answer.\"}]}}]}\n\n",
+            "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"more thinking\",\"thought\":true}]},\"finishReason\":\"STOP\"}]}\n\n",
+        );
+        let items = run_parser(&mut GeminiParser::default(), &[stream.as_bytes()]);
+        assert_eq!(texts(items), ["Answer."]);
     }
 
     #[test]

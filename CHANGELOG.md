@@ -39,6 +39,9 @@ All notable changes are documented here. The format follows
   window that does not exist). The key field now comes back after a refusal, and the messages
   describe what the user can actually do.
 
+- Gemini reasoning parts (`thought: true`) are no longer mixed into the answer (from the
+  vendor's documentation).
+
 ### Changed (since the first popup)
 
 - The popup is minimal: one field at the bottom, the answer growing above it, one dim
