@@ -214,6 +214,17 @@ pub enum SignInError {
     TimedOut,
 }
 
+/// A provider and whether it is ready to use, for the settings page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionStatus {
+    pub id: String,
+    pub label: String,
+    pub requires_key: bool,
+    pub signs_in: bool,
+    /// A credential is stored (always `true` for a provider that needs none).
+    pub connected: bool,
+}
+
 /// One provider as the popup shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderInfo {
@@ -454,6 +465,41 @@ impl Orchestrator {
                 return;
             }
         }
+    }
+
+    /// Every provider with whether its credential is stored. A wallet that cannot be read
+    /// counts as not connected.
+    pub async fn connection_status(&self) -> Vec<ConnectionStatus> {
+        let entries: Vec<(String, String, bool, bool)> = {
+            let state = self.inner.state();
+            state
+                .config
+                .providers
+                .iter()
+                .map(|p| {
+                    (
+                        p.id.clone(),
+                        p.display_name().to_owned(),
+                        p.kind.requires_key(),
+                        p.kind.signs_in(),
+                    )
+                })
+                .collect()
+        };
+        let mut out = Vec::new();
+        for (id, label, requires_key, signs_in) in entries {
+            let rejected = self.inner.state().rejected_keys.contains(&id);
+            let connected =
+                !requires_key || (!rejected && self.has_api_key(&id).await.unwrap_or(false));
+            out.push(ConnectionStatus {
+                id,
+                label,
+                requires_key,
+                signs_in,
+                connected,
+            });
+        }
+        out
     }
 
     /// The current provider needs an API key from the user: none is stored (or the
@@ -1673,5 +1719,36 @@ mod tests {
             "Ollama contributes only what its server lists"
         );
         assert!(list[0].requires_key);
+    }
+
+    #[tokio::test]
+    async fn the_connection_status_follows_the_stored_credentials() {
+        let h = harness(built_in_config());
+        let status = |list: &[ConnectionStatus], id: &str| {
+            list.iter().find(|s| s.id == id).map(|s| s.connected)
+        };
+        let before = h.orch.connection_status().await;
+        assert_eq!(status(&before, "anthropic"), Some(false));
+        assert_eq!(
+            status(&before, "ollama"),
+            Some(true),
+            "a local server needs no credential"
+        );
+        assert!(before.iter().find(|s| s.id == "chatgpt").unwrap().signs_in);
+
+        h.orch
+            .save_api_key("anthropic", Secret::new("a-key"))
+            .await
+            .unwrap();
+        assert_eq!(
+            status(&h.orch.connection_status().await, "anthropic"),
+            Some(true)
+        );
+
+        h.orch.delete_api_key("anthropic").await.unwrap();
+        assert_eq!(
+            status(&h.orch.connection_status().await, "anthropic"),
+            Some(false)
+        );
     }
 }

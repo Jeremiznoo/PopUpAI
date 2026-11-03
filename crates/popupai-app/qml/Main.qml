@@ -15,6 +15,9 @@ Window {
     readonly property int maxHeight: 600
     property bool wasActive: false
     property bool pickerOpen: false
+    property bool settingsOpen: false
+    property var allSettings: []
+    readonly property bool overlayOpen: pickerOpen || settingsOpen
     property var allModels: []
 
     // The popup starts narrow and, as the answer gets longer, widens towards a square so
@@ -24,10 +27,10 @@ Window {
     visible: false
     // The window is 14 px larger than the card on every side, which is where the shadow lives.
     readonly property int shadowMargin: 14
-    width: (pickerOpen ? 520 : answerWidth) + 2 * shadowMargin
+    width: (overlayOpen ? 520 : answerWidth) + 2 * shadowMargin
     // The input stays at the bottom edge and the answer grows above it, so the field
     // does not move while an answer streams in.
-    height: (pickerOpen ? 400 : Math.min(maxHeight, content.implicitHeight + 24)) + 2 * shadowMargin
+    height: (overlayOpen ? 400 : Math.min(maxHeight, content.implicitHeight + 24)) + 2 * shadowMargin
     Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
     color: "transparent"
     title: "PopUpAI"
@@ -60,7 +63,51 @@ Window {
         list.currentIndex = listModel.count > 0 ? 0 : -1
     }
 
+    function rebuildSettings() {
+        settingsModel.clear()
+        for (const row of allSettings)
+            settingsModel.append(row)
+        if (settingsList.currentIndex < 0 || settingsList.currentIndex >= settingsModel.count)
+            settingsList.currentIndex = settingsModel.count > 0 ? 0 : -1
+    }
+
+    function openSettings() {
+        pickerOpen = false
+        controller.loadSettings()
+        settingsOpen = true
+        rebuildSettings()
+        settingsKeys.forceActiveFocus()
+    }
+
+    function closeSettings() {
+        settingsOpen = false
+        focusField()
+    }
+
+    function activateSetting() {
+        if (settingsList.currentIndex < 0)
+            return
+        const row = settingsModel.get(settingsList.currentIndex)
+        if (row.kind === "provider") {
+            controller.connectProvider(row.id)
+            closeSettings()
+        } else if (row.kind === "autostart") {
+            controller.toggleAutostart()
+        } else if (row.kind === "shortcut") {
+            controller.configureShortcut()
+        }
+    }
+
+    function removeSetting() {
+        if (settingsList.currentIndex < 0)
+            return
+        const row = settingsModel.get(settingsList.currentIndex)
+        if (row.kind === "provider" && row.removable)
+            controller.disconnectProvider(row.id)
+    }
+
     function openPicker() {
+        settingsOpen = false
         controller.loadModels()
         searchInput.text = ""
         pickerOpen = true
@@ -105,6 +152,7 @@ Window {
         visible = false
         wasActive = false
         pickerOpen = false
+        settingsOpen = false
         keyInput.text = ""
         if (oneShot)
             Qt.quit()
@@ -165,7 +213,12 @@ Window {
     // Window-wide keys, whichever field has the focus.
     Shortcut {
         sequence: "Esc"
-        onActivated: popup.pickerOpen ? popup.closePicker() : popup.closePopup("escape")
+        onActivated: popup.settingsOpen ? popup.closeSettings()
+                     : popup.pickerOpen ? popup.closePicker() : popup.closePopup("escape")
+    }
+    Shortcut {
+        sequence: "Ctrl+,"
+        onActivated: popup.settingsOpen ? popup.closeSettings() : popup.openSettings()
     }
     Shortcut {
         sequence: "Ctrl+P"
@@ -204,11 +257,21 @@ Window {
         // The field to type in changes when a key turns out to be missing or has
         // just been saved.
         function onNeedsKeyChanged() {
-            if (popup.visible && !popup.pickerOpen)
+            if (popup.visible && !popup.overlayOpen)
                 popup.focusField()
         }
 
         // The list of models arrives asynchronously after Ctrl+P.
+        function onSettingsJsonChanged() {
+            try {
+                popup.allSettings = JSON.parse(controller.settingsJson)
+            } catch (e) {
+                popup.allSettings = []
+            }
+            if (popup.settingsOpen)
+                popup.rebuildSettings()
+        }
+
         function onModelsJsonChanged() {
             try {
                 popup.allModels = JSON.parse(controller.modelsJson)
@@ -277,7 +340,7 @@ Window {
 
         Column {
             id: content
-            visible: !popup.pickerOpen
+            visible: !popup.overlayOpen
             anchors {
                 left: parent.left
                 right: parent.right
@@ -538,6 +601,11 @@ Window {
                     spacing: 12
 
                     TextButton {
+                        text: "\u2699 Settings"
+                        onClicked: popup.openSettings()
+                    }
+
+                    TextButton {
                         visible: controller.status === "streaming"
                         text: "Stop"
                         onClicked: controller.stop()
@@ -548,6 +616,129 @@ Window {
                         onClicked: popup.copyAnswer()
                     }
                 }
+            }
+        }
+
+        // Settings (Ctrl+, or the gear): connections to providers and a few general options.
+        Item {
+            id: settingsView
+            visible: popup.settingsOpen
+            anchors.fill: parent
+            anchors.margins: 14
+
+            Item {
+                id: settingsHeader
+                width: parent.width
+                height: 20
+                Text {
+                    text: "Settings"
+                    font.bold: true
+                    font.pixelSize: 13
+                    color: palette.windowText
+                }
+                Text {
+                    anchors.right: parent.right
+                    text: "esc"
+                    font.pixelSize: 12
+                    color: Qt.alpha(palette.windowText, 0.5)
+                }
+            }
+
+            // Takes the keyboard while the page is open.
+            Item {
+                id: settingsKeys
+                anchors.fill: parent
+                focus: popup.settingsOpen
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Down) {
+                        settingsList.currentIndex = Math.min(settingsList.count - 1, settingsList.currentIndex + 1)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Up) {
+                        settingsList.currentIndex = Math.max(0, settingsList.currentIndex - 1)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                        popup.activateSetting()
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                        popup.removeSetting()
+                        event.accepted = true
+                    }
+                }
+            }
+
+            ListModel { id: settingsModel }
+
+            ListView {
+                id: settingsList
+                anchors {
+                    top: settingsHeader.bottom
+                    topMargin: 8
+                    bottom: settingsFooter.top
+                    bottomMargin: 8
+                    left: parent.left
+                    right: parent.right
+                }
+                clip: true
+                model: settingsModel
+                highlightMoveDuration: 0
+                boundsBehavior: Flickable.StopAtBounds
+
+                section.property: "group"
+                section.criteria: ViewSection.FullString
+                section.delegate: Text {
+                    width: settingsList.width
+                    height: 26
+                    verticalAlignment: Text.AlignBottom
+                    text: section
+                    font.bold: true
+                    font.pixelSize: 12
+                    color: palette.highlight
+                }
+
+                delegate: Rectangle {
+                    width: settingsList.width
+                    height: 38
+                    radius: 8
+                    color: ListView.isCurrentItem ? Qt.alpha(palette.highlight, 0.25) : "transparent"
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 1
+                        Text {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: model.title
+                            font.pixelSize: 13
+                            color: palette.windowText
+                        }
+                        Text {
+                            width: parent.width
+                            elide: Text.ElideRight
+                            text: model.detail
+                            font.pixelSize: 11
+                            color: Qt.alpha(palette.windowText, 0.55)
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            settingsList.currentIndex = index
+                            popup.activateSetting()
+                        }
+                    }
+                }
+            }
+
+            Text {
+                id: settingsFooter
+                anchors.bottom: parent.bottom
+                text: "enter choose \u00b7 del disconnect \u00b7 esc close"
+                font.pixelSize: 11
+                color: Qt.alpha(palette.windowText, 0.5)
             }
         }
 
@@ -603,6 +794,9 @@ Window {
                         event.accepted = true
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                         popup.chooseCurrent()
+                        event.accepted = true
+                    } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_A) {
+                        popup.openSettings()
                         event.accepted = true
                     } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F
                                && list.currentIndex >= 0) {
@@ -685,7 +879,7 @@ Window {
             Text {
                 id: pickerFooter
                 anchors.bottom: parent.bottom
-                text: "enter select \u00b7 ctrl+f favorite \u00b7 esc close"
+                text: "enter select \u00b7 ctrl+f favorite \u00b7 ctrl+a connect \u00b7 esc close"
                 font.pixelSize: 11
                 color: Qt.alpha(palette.windowText, 0.5)
             }

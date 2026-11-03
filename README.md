@@ -40,8 +40,11 @@ The global shortcut needs the launcher file installed (see *Install for your use
 the desktop portal refuses an application it cannot identify. On KDE the key is then
 assigned by you: if the popup says *no key assigned*, click *Set the shortcut…* and set it
 in the window KDE opens. Without a working global shortcut (the popup says so), bind the command
-`popupai --toggle` in *System Settings, Shortcuts*. Settings live in
-`~/.config/popupai/config.toml` (created with mode 0600); there is no settings window yet.
+`popupai --toggle` in *System Settings, Shortcuts*. **Settings** (Ctrl+, or the gear under the field; Ctrl+A from the model picker, as in opencode):
+the list of providers with their state (signed in, API key stored, not connected, local), where
+Enter connects (the field then asks for the key or starts the sign-in) and Delete removes the stored
+credential, plus *Start with the session* and *Global shortcut*. Everything else lives in
+`~/.config/popupai/config.toml` (created with mode 0600).
 
 The popup is deliberately bare: one field, the answer above it, one dim line.
 

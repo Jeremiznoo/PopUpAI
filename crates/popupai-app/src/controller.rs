@@ -32,6 +32,7 @@ pub mod qobject {
         #[qproperty(bool, signs_in, cxx_name = "signsIn")]
         #[qproperty(QString, sign_in_text, cxx_name = "signInText")]
         #[qproperty(QString, models_json, cxx_name = "modelsJson")]
+        #[qproperty(QString, settings_json, cxx_name = "settingsJson")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
         type PopupController = super::PopupControllerRust;
@@ -64,6 +65,26 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "signIn"]
         fn sign_in(self: Pin<&mut PopupController>);
+
+        /// Fill `settingsJson` with the rows of the settings page.
+        #[qinvokable]
+        #[cxx_name = "loadSettings"]
+        fn load_settings(self: Pin<&mut PopupController>);
+
+        /// Make this provider the current one, so the field asks for its key or sign-in.
+        #[qinvokable]
+        #[cxx_name = "connectProvider"]
+        fn connect_provider(self: Pin<&mut PopupController>, provider: &QString);
+
+        /// Remove the stored key or sign-in of a provider.
+        #[qinvokable]
+        #[cxx_name = "disconnectProvider"]
+        fn disconnect_provider(self: Pin<&mut PopupController>, provider: &QString);
+
+        /// Turn "start with the session" on or off.
+        #[qinvokable]
+        #[cxx_name = "toggleAutostart"]
+        fn toggle_autostart(self: Pin<&mut PopupController>);
 
         /// Fill `modelsJson` with the models that can be picked.
         #[qinvokable]
@@ -107,14 +128,15 @@ use cxx_qt_lib::QString;
 use popupai_core::markdown;
 use popupai_core::orchestrator::Event;
 use popupai_core::state::{ModelRef, UserState};
-use popupai_platform::Command;
 use popupai_platform::shortcut::ShortcutStatus;
+use popupai_platform::{Autostart, Command};
 use popupai_security::Secret;
 use zeroize::Zeroizing;
 
 use crate::context;
 use crate::key_input;
 use crate::picker;
+use crate::settings_page;
 use crate::shortcut_notice;
 use crate::view_model::ViewModel;
 
@@ -135,6 +157,7 @@ pub struct PopupControllerRust {
     needs_key: bool,
     can_configure_shortcut: bool,
     models_json: QString,
+    settings_json: QString,
     sign_in_text: QString,
     signs_in: bool,
     signing_in: bool,
@@ -391,6 +414,90 @@ impl qobject::PopupController {
                     }
                 }
                 controller.sync();
+            });
+        });
+    }
+
+    fn connect_provider(mut self: Pin<&mut Self>, provider: &QString) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        if app.orchestrator.select_provider(&provider.to_string())
+            && let Some(info) = app.orchestrator.current_provider()
+        {
+            self.as_mut()
+                .set_provider_label(QString::from(info.label.as_str()));
+        }
+        self.as_mut().refresh_needs_key();
+    }
+
+    fn disconnect_provider(self: Pin<&mut Self>, provider: &QString) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let (orchestrator, provider) = (app.orchestrator.clone(), provider.to_string());
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn(async move {
+            match orchestrator.delete_api_key(&provider).await {
+                Ok(()) => tracing::info!(provider = %provider, "credential removed"),
+                Err(err) => tracing::warn!("could not remove the credential: {err}"),
+            }
+            let _ = qt_thread.queue(|mut controller| {
+                controller.as_mut().refresh_needs_key();
+                controller.load_settings();
+            });
+        });
+    }
+
+    fn toggle_autostart(self: Pin<&mut Self>) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let orchestrator = app.orchestrator.clone();
+        let config_path = app.config_path.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn_blocking(move || {
+            if let Some(autostart) = Autostart::user() {
+                let on = !autostart.is_enabled();
+                let applied = if on {
+                    std::env::current_exe().and_then(|exe| autostart.enable(&exe))
+                } else {
+                    autostart.disable()
+                };
+                match applied {
+                    Ok(()) => {
+                        tracing::info!(enabled = on, "autostart entry updated");
+                        // Keep the setting in step, so the next start does not undo it.
+                        if let Some(path) = config_path {
+                            let mut config = orchestrator.config();
+                            config.general.launch_at_startup = on;
+                            if let Err(err) = config.save(&path) {
+                                tracing::warn!("could not save the setting: {err}");
+                            }
+                        }
+                    }
+                    Err(err) => tracing::warn!("could not update the autostart entry: {err}"),
+                }
+            }
+            let _ = qt_thread.queue(|controller| controller.load_settings());
+        });
+    }
+
+    /// Build the settings rows off the Qt thread (the wallet is asked for each key).
+    fn load_settings(self: Pin<&mut Self>) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let orchestrator = app.orchestrator.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn(async move {
+            let status = orchestrator.connection_status().await;
+            let autostart = Autostart::user().map(|a| a.is_enabled());
+            let json = settings_page::to_json(&settings_page::build(&status, autostart));
+            let _ = qt_thread.queue(move |mut controller| {
+                controller
+                    .as_mut()
+                    .set_settings_json(QString::from(json.as_str()));
             });
         });
     }

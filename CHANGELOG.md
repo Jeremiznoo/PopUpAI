@@ -44,6 +44,11 @@ All notable changes are documented here. The format follows
   a send button that appears once there is text, and animated thinking dots. Checked by loading
   the interface headlessly; **not yet looked at on screen**.
 
+- Settings page (Ctrl+, or the gear; Ctrl+A in the model picker): connection state of each
+  provider, connect, disconnect (removes the stored credential), start with the session, and the
+  global shortcut. The rows and their wording are unit-tested; the page has not been looked at on
+  screen.
+
 ### Fixed (since the first popup)
 
 - Google reports a wrong API key as HTTP 400, which was shown as a generic error; it is now an

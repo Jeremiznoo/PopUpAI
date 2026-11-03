@@ -21,6 +21,8 @@ pub struct Parts {
     pub notice: String,
     /// Where the favourite and recent models are kept.
     pub state_path: PathBuf,
+    /// The settings file, when it may be written back (it was read successfully).
+    pub config_path: Option<PathBuf>,
     /// Whether the popup shows as soon as the application starts.
     pub start_visible: bool,
     /// Development aid: quit when the popup is dismissed instead of staying
@@ -41,6 +43,7 @@ pub struct AppContext {
     pub runtime: Handle,
     pub notice: String,
     pub state_path: PathBuf,
+    pub config_path: Option<PathBuf>,
     pub start_visible: bool,
     pub exit_on_dismiss: bool,
     pub shortcut_configure: Option<UnboundedSender<()>>,
@@ -56,6 +59,7 @@ impl AppContext {
             runtime: parts.runtime,
             notice: parts.notice,
             state_path: parts.state_path,
+            config_path: parts.config_path,
             start_visible: parts.start_visible,
             exit_on_dismiss: parts.exit_on_dismiss,
             shortcut_configure: parts.shortcut_configure,
