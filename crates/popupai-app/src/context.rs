@@ -19,10 +19,8 @@ pub struct Parts {
     /// A problem to show to the user at start-up (for example an unreadable
     /// configuration file). Empty when there is none.
     pub notice: String,
-    /// Where the settings may be written back (for example the provider the user
-    /// picked). `None` when the file could not be read: it is then left alone
-    /// rather than overwritten with defaults.
-    pub config_path: Option<PathBuf>,
+    /// Where the favourite and recent models are kept.
+    pub state_path: PathBuf,
     /// Whether the popup shows as soon as the application starts.
     pub start_visible: bool,
     /// Development aid: quit when the popup is dismissed instead of staying
@@ -42,7 +40,7 @@ pub struct AppContext {
     pub orchestrator: Orchestrator,
     pub runtime: Handle,
     pub notice: String,
-    pub config_path: Option<PathBuf>,
+    pub state_path: PathBuf,
     pub start_visible: bool,
     pub exit_on_dismiss: bool,
     pub shortcut_configure: Option<UnboundedSender<()>>,
@@ -57,7 +55,7 @@ impl AppContext {
             orchestrator: parts.orchestrator,
             runtime: parts.runtime,
             notice: parts.notice,
-            config_path: parts.config_path,
+            state_path: parts.state_path,
             start_visible: parts.start_visible,
             exit_on_dismiss: parts.exit_on_dismiss,
             shortcut_configure: parts.shortcut_configure,

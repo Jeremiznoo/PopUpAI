@@ -3,6 +3,7 @@ mod config_path;
 mod context;
 mod controller;
 mod key_input;
+mod picker;
 mod shortcut_notice;
 mod view_model;
 
@@ -131,6 +132,7 @@ fn main() -> ExitCode {
 
     // The configuration comes next: its log level decides what gets printed.
     let path = config_path::config_path();
+    let state_path = path.with_file_name("state.toml");
     let (config, notice) = match Config::load(&path) {
         Ok(config) => (config, String::new()),
         Err(err) => (Config::default(), format!("Configuration problem: {err}")),
@@ -154,7 +156,6 @@ fn main() -> ExitCode {
     // Keyring, KeePassXC). If none is running, providers that need a key say so, and
     // keyless local providers such as Ollama still work.
     let store = Arc::new(SecretServiceStore::new());
-    let config_writable = notice.is_empty();
 
     // Commands come from two places: later invocations (D-Bus) and the global
     // shortcut (the desktop portal). They meet in one channel.
@@ -226,7 +227,14 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         };
-    // Without an explicit choice, start on the first provider that can work now.
+    // Start on the model used last time; without one, on the first provider that can
+    // work now.
+    if let Some(last) = popupai_core::state::UserState::load(&state_path)
+        .recent
+        .first()
+    {
+        orchestrator.select_model(&last.provider, &last.model);
+    }
     runtime.block_on(orchestrator.auto_select());
     tracing::info!(
         provider = orchestrator
@@ -238,7 +246,7 @@ fn main() -> ExitCode {
         orchestrator,
         runtime: runtime.handle().clone(),
         notice,
-        config_path: config_writable.then_some(path),
+        state_path,
         start_visible,
         exit_on_dismiss: std::env::var_os("POPUPAI_EXIT_ON_DISMISS").is_some_and(|v| v == "1"),
         events,

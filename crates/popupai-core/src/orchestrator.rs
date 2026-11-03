@@ -27,6 +27,7 @@ use crate::config::{Config, ConfigIssue, ProviderEntry, ProviderKind};
 use crate::credentials::{self, CredentialError};
 use crate::request_error::RequestError;
 use crate::session::{Effect, Message, Phase, Role, SessionId, SessionManager, SubmitError};
+use crate::state::ModelRef;
 
 /// What the UI needs to know as a request progresses.
 #[derive(Clone, PartialEq, Eq)]
@@ -125,6 +126,8 @@ struct State {
     /// Providers whose stored key was refused (by the service, or because the endpoint
     /// changed since it was saved). The popup asks for a new key until one is saved.
     rejected_keys: HashSet<String>,
+    /// A model picked in the popup, which wins over the provider's configured one.
+    selected_model: Option<ModelRef>,
 }
 
 struct Inner {
@@ -206,10 +209,31 @@ pub struct ProviderInfo {
     pub label: String,
     /// The service cannot be used without an API key.
     pub requires_key: bool,
+    /// The model the next question would use (empty: the server's smallest, for Ollama).
+    pub model: String,
 }
 
-fn info_of(entry: &ProviderEntry) -> ProviderInfo {
-    let model = entry.effective_model();
+/// A model that can be picked in the popup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelChoice {
+    pub provider: String,
+    pub provider_label: String,
+    pub model: String,
+    /// The provider needs an API key (the popup then asks for it when chosen).
+    pub requires_key: bool,
+}
+
+/// The model picked in the popup for this provider, if any.
+fn picked<'a>(state: &'a State, provider: &str) -> Option<&'a str> {
+    state
+        .selected_model
+        .as_ref()
+        .filter(|m| m.provider == provider)
+        .map(|m| m.model.as_str())
+}
+
+fn info_of(entry: &ProviderEntry, picked: Option<&str>) -> ProviderInfo {
+    let model = picked.unwrap_or_else(|| entry.effective_model());
     ProviderInfo {
         id: entry.id.clone(),
         label: if model.is_empty() {
@@ -218,6 +242,7 @@ fn info_of(entry: &ProviderEntry) -> ProviderInfo {
             format!("{} \u{b7} {model}", entry.display_name())
         },
         requires_key: entry.kind.requires_key(),
+        model: model.to_owned(),
     }
 }
 
@@ -242,6 +267,7 @@ impl Orchestrator {
             tasks: HashMap::new(),
             providers: HashMap::new(),
             rejected_keys: HashSet::new(),
+            selected_model: None,
         };
         let inner = Inner {
             state: Mutex::new(state),
@@ -281,8 +307,70 @@ impl Orchestrator {
         let known = state.config.provider(id).is_some();
         if known {
             state.selected = Some(id.to_owned());
+            if state
+                .selected_model
+                .as_ref()
+                .is_some_and(|m| m.provider != id)
+            {
+                state.selected_model = None;
+            }
         }
         known
+    }
+
+    /// Use `model` on `provider` for the next questions. `false` if the provider is
+    /// unknown or the model name is not acceptable.
+    pub fn select_model(&self, provider: &str, model: &str) -> bool {
+        let model = model.trim();
+        let acceptable = model.len() <= 200 && !model.chars().any(char::is_control);
+        let mut state = self.inner.state();
+        if !acceptable || state.config.provider(provider).is_none() {
+            return false;
+        }
+        state.selected = Some(provider.to_owned());
+        state.selected_model = (!model.is_empty()).then(|| ModelRef::new(provider, model));
+        true
+    }
+
+    /// The models that can be picked: each provider's configured or lightest default
+    /// model, plus whatever a keyless local server says it has installed. A server that
+    /// does not answer within a few seconds simply contributes nothing.
+    pub async fn available_models(&self) -> Vec<ModelChoice> {
+        let entries: Vec<(ProviderEntry, Duration)> = {
+            let state = self.inner.state();
+            let advanced = &state.config.advanced;
+            state
+                .config
+                .providers
+                .iter()
+                .map(|p| (p.clone(), p.timeout(advanced)))
+                .collect()
+        };
+        let mut choices = Vec::new();
+        for (entry, timeout) in entries {
+            let mut models: Vec<String> = Vec::new();
+            if !entry.effective_model().is_empty() {
+                models.push(entry.effective_model().to_owned());
+            }
+            if !entry.kind.requires_key()
+                && let Ok(provider) = provider_for_entry(&self.inner, &entry, timeout).await
+                && let Ok(Ok(listed)) =
+                    tokio::time::timeout(Duration::from_secs(3), provider.list_models()).await
+            {
+                models.extend(listed.into_iter().map(|m| m.id));
+            }
+            models.sort();
+            models.dedup();
+            let (label, requires_key) =
+                (entry.display_name().to_owned(), entry.kind.requires_key());
+            choices.extend(models.into_iter().map(|model| ModelChoice {
+                provider: entry.id.clone(),
+                provider_label: label.clone(),
+                model,
+                requires_key,
+            }));
+        }
+        choices
     }
 
     /// Every configured provider, in order.
@@ -292,7 +380,7 @@ impl Orchestrator {
             .config
             .providers
             .iter()
-            .map(info_of)
+            .map(|entry| info_of(entry, None))
             .collect()
     }
 
@@ -304,7 +392,7 @@ impl Orchestrator {
             .as_deref()
             .and_then(|id| state.config.provider(id))
             .or_else(|| state.config.default_provider())
-            .map(info_of)
+            .map(|entry| info_of(entry, picked(&state, &entry.id)))
     }
 
     /// Switch to the next provider in the list (wrapping around) and return it.
@@ -321,8 +409,9 @@ impl Orchestrator {
             .as_deref()
             .and_then(|id| providers.iter().position(|p| p.id == id));
         let next = providers.get(position.map_or(0, |i| (i + 1) % providers.len()))?;
-        let (id, info) = (next.id.clone(), info_of(next));
+        let (id, info) = (next.id.clone(), info_of(next, None));
         state.selected = Some(id);
+        state.selected_model = None;
         Some(info)
     }
 
@@ -546,8 +635,11 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
             entry: None,
         }));
     };
+    let model = picked(state, &entry.id)
+        .unwrap_or_else(|| entry.effective_model())
+        .to_owned();
     // Ollama may have no model set: the adapter then uses the smallest installed one.
-    if entry.effective_model().is_empty() && entry.kind != ProviderKind::Ollama {
+    if model.is_empty() && entry.kind != ProviderKind::Ollama {
         return Err(Box::new(SetupFailure {
             error: RequestError::NoModel,
             entry: Some(entry),
@@ -572,7 +664,7 @@ fn make_job(state: &State) -> Result<Job, Box<SetupFailure>> {
         .unwrap_or_default();
     let advanced = &state.config.advanced;
     let request = ChatRequest {
-        model: entry.effective_model().to_owned(),
+        model,
         messages,
         system_prompt: advanced
             .system_prompt
@@ -619,35 +711,39 @@ async fn answer(inner: &Arc<Inner>, id: SessionId, job: &Job) -> Result<(), Requ
 /// The cached provider, or a new one built with the key from the secret store.
 /// The key is only released if it was saved for this provider's endpoint.
 async fn provider_for(inner: &Arc<Inner>, job: &Job) -> Result<Arc<dyn Provider>, RequestError> {
-    let cached = inner.state().providers.get(&job.entry.id).cloned();
+    provider_for_entry(inner, &job.entry, job.timeout).await
+}
+
+async fn provider_for_entry(
+    inner: &Arc<Inner>,
+    entry: &ProviderEntry,
+    timeout: Duration,
+) -> Result<Arc<dyn Provider>, RequestError> {
+    let cached = inner.state().providers.get(&entry.id).cloned();
     if let Some(provider) = cached {
         return Ok(provider);
     }
-    let endpoint = job.entry.endpoint().map_err(ProviderError::from)?;
+    let endpoint = entry.endpoint().map_err(ProviderError::from)?;
     let origin = endpoint.origin();
-    let (store, id) = (inner.store.clone(), job.entry.id.clone());
+    let (store, id) = (inner.store.clone(), entry.id.clone());
     let key = match blocking(move || credentials::load_key(&*store, &id, &origin)).await {
         Ok(key) => key,
         // A local server such as Ollama needs no key, so an unavailable secret
         // store must not stop it. Providers that do need a key still fail below.
-        Err(CredentialError::Store(StoreError::Unavailable(_)))
-            if !job.entry.kind.requires_key() =>
-        {
+        Err(CredentialError::Store(StoreError::Unavailable(_))) if !entry.kind.requires_key() => {
             tracing::warn!(
-                provider = %job.entry.id,
+                provider = %entry.id,
                 "secret store unavailable; continuing without an API key"
             );
             None
         }
         Err(err) => return Err(err.into()),
     };
-    let provider = inner
-        .factory
-        .build(&job.entry, endpoint, key, job.timeout)?;
+    let provider = inner.factory.build(entry, endpoint, key, timeout)?;
     inner
         .state()
         .providers
-        .insert(job.entry.id.clone(), provider.clone());
+        .insert(entry.id.clone(), provider.clone());
     Ok(provider)
 }
 
@@ -1405,5 +1501,64 @@ mod tests {
             .await
             .unwrap();
         assert!(!h.orch.current_needs_key().await);
+    }
+
+    #[tokio::test]
+    async fn a_picked_model_is_used_and_shown_until_another_provider_is_chosen() {
+        let mut config = built_in_config();
+        config.default_provider = Some("anthropic".into());
+        let h = harness(config);
+        h.orch
+            .save_api_key("anthropic", Secret::new("a-key"))
+            .await
+            .unwrap();
+
+        assert!(h.orch.select_model("anthropic", "claude-opus-5-5"));
+        assert_eq!(
+            h.orch.provider_label().as_deref(),
+            Some("Claude \u{b7} claude-opus-5-5")
+        );
+        h.orch.open();
+        let feed = h.feed();
+        h.orch.submit("hi").unwrap();
+        drop(feed);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(h.requests()[0].model, "claude-opus-5-5");
+
+        // Another provider goes back to its own default.
+        assert!(h.orch.select_provider("openai"));
+        assert_eq!(
+            h.orch.provider_label().as_deref(),
+            Some("OpenAI \u{b7} gpt-6-luna")
+        );
+    }
+
+    #[tokio::test]
+    async fn unacceptable_model_choices_are_refused() {
+        let h = harness(built_in_config());
+        assert!(!h.orch.select_model("nope", "x"));
+        assert!(!h.orch.select_model("anthropic", "bad\nmodel"));
+        assert!(!h.orch.select_model("anthropic", &"x".repeat(201)));
+        assert_eq!(h.orch.current_provider().unwrap().id, "anthropic");
+    }
+
+    #[tokio::test]
+    async fn the_available_models_list_each_providers_default() {
+        let h = harness(built_in_config());
+        let list = h.orch.available_models().await;
+        let pairs: Vec<(&str, &str)> = list
+            .iter()
+            .map(|c| (c.provider.as_str(), c.model.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                ("anthropic", "claude-haiku-5-5"),
+                ("openai", "gpt-6-luna"),
+                ("gemini", "gemini-3.5-flash-lite"),
+            ],
+            "Ollama contributes only what its server lists"
+        );
+        assert!(list[0].requires_key);
     }
 }

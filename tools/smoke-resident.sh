@@ -109,7 +109,7 @@ shown="$(count "popup opened")"
 timeout 10 "$bin"
 sleep 0.5
 check "a plain launch on a visible popup changes nothing" exactly "popup opened" "$shown"
-check "only one process is running" test "$(pgrep -c -x popupai)" -eq 1
+check "only one process is running" test "$(pgrep -c -f "^$bin( |$)")" -eq 1
 
 echo "5. --quit stops the running instance"
 timeout 10 "$bin" --quit

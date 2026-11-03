@@ -11,14 +11,21 @@ Window {
     // on dismissal instead.
     readonly property bool oneShot: controller.exitOnDismiss
 
-    readonly property int maxHeight: 560
+    readonly property int maxHeight: 600
     property bool wasActive: false
+    property bool pickerOpen: false
+    property var allModels: []
+
+    // The popup starts narrow and, as the answer gets longer, widens towards a square so
+    // that a long answer is comfortable to read.
+    readonly property int answerWidth: Math.min(640, 440 + Math.round(controller.answer.length * 0.25))
 
     visible: false
-    width: 440
+    width: pickerOpen ? 520 : answerWidth
     // The input stays at the bottom edge and the answer grows above it, so the field
     // does not move while an answer streams in.
-    height: Math.min(maxHeight, content.implicitHeight + 24)
+    height: pickerOpen ? 400 : Math.min(maxHeight, content.implicitHeight + 24)
+    Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
     color: "transparent"
     title: "PopUpAI"
 
@@ -37,6 +44,39 @@ Window {
 
     // Used only to write the answer to the clipboard when the user asks for it.
     TextEdit { id: clipboard; visible: false }
+
+    function rebuildList() {
+        const query = searchInput.text.trim().toLowerCase()
+        listModel.clear()
+        for (const entry of allModels) {
+            if (query.length > 0
+                    && (entry.model + " " + entry.provider_label).toLowerCase().indexOf(query) < 0)
+                continue
+            listModel.append(entry)
+        }
+        list.currentIndex = listModel.count > 0 ? 0 : -1
+    }
+
+    function openPicker() {
+        controller.loadModels()
+        searchInput.text = ""
+        pickerOpen = true
+        rebuildList()
+        searchInput.forceActiveFocus()
+    }
+
+    function closePicker() {
+        pickerOpen = false
+        focusField()
+    }
+
+    function chooseCurrent() {
+        if (list.currentIndex < 0)
+            return
+        const entry = listModel.get(list.currentIndex)
+        controller.chooseModel(entry.provider, entry.model)
+        closePicker()
+    }
 
     function focusField() {
         if (controller.needsKey)
@@ -58,6 +98,7 @@ Window {
         controller.dismiss(reason)
         visible = false
         wasActive = false
+        pickerOpen = false
         keyInput.text = ""
         if (oneShot)
             Qt.quit()
@@ -116,8 +157,14 @@ Window {
     }
 
     // Window-wide keys, whichever field has the focus.
-    Shortcut { sequence: "Esc"; onActivated: popup.closePopup("escape") }
-    Shortcut { sequence: "Ctrl+P"; onActivated: controller.cycleProvider() }
+    Shortcut {
+        sequence: "Esc"
+        onActivated: popup.pickerOpen ? popup.closePicker() : popup.closePopup("escape")
+    }
+    Shortcut {
+        sequence: "Ctrl+P"
+        onActivated: popup.pickerOpen ? popup.closePicker() : popup.openPicker()
+    }
     Shortcut { sequence: "Ctrl+R"; onActivated: controller.resume() }
     Shortcut { sequence: "Ctrl+."; onActivated: controller.stop() }
     Shortcut {
@@ -151,8 +198,19 @@ Window {
         // The field to type in changes when a key turns out to be missing or has
         // just been saved.
         function onNeedsKeyChanged() {
-            if (popup.visible)
+            if (popup.visible && !popup.pickerOpen)
                 popup.focusField()
+        }
+
+        // The list of models arrives asynchronously after Ctrl+P.
+        function onModelsJsonChanged() {
+            try {
+                popup.allModels = JSON.parse(controller.modelsJson)
+            } catch (e) {
+                popup.allModels = []
+            }
+            if (popup.pickerOpen)
+                popup.rebuildList()
         }
     }
 
@@ -184,6 +242,7 @@ Window {
 
         Column {
             id: content
+            visible: !popup.pickerOpen
             anchors {
                 left: parent.left
                 right: parent.right
@@ -364,7 +423,7 @@ Window {
                     text: controller.needsKey
                         ? controller.providerLabel + " · key goes to the system wallet"
                         : controller.providerLabel
-                    onClicked: controller.cycleProvider()
+                    onClicked: popup.openPicker()
                 }
 
                 Row {
@@ -383,6 +442,146 @@ Window {
                         onClicked: popup.copyAnswer()
                     }
                 }
+            }
+        }
+
+        // Model picker (Ctrl+P): search, recent and favourite models, then every provider.
+        Item {
+            id: picker
+            visible: popup.pickerOpen
+            anchors.fill: parent
+            anchors.margins: 14
+
+            Item {
+                id: pickerHeader
+                width: parent.width
+                height: 20
+                Text {
+                    text: "Select model"
+                    font.bold: true
+                    font.pixelSize: 13
+                    color: palette.windowText
+                }
+                Text {
+                    anchors.right: parent.right
+                    text: "esc"
+                    font.pixelSize: 12
+                    color: Qt.alpha(palette.windowText, 0.5)
+                }
+            }
+
+            TextInput {
+                id: searchInput
+                anchors.top: pickerHeader.bottom
+                anchors.topMargin: 10
+                width: parent.width
+                height: 24
+                color: palette.text
+                font.pixelSize: 14
+                selectByMouse: true
+                onTextChanged: popup.rebuildList()
+
+                Text {
+                    visible: searchInput.text.length === 0
+                    text: "Search"
+                    font: searchInput.font
+                    color: Qt.alpha(palette.text, 0.4)
+                }
+
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Down) {
+                        list.currentIndex = Math.min(list.count - 1, list.currentIndex + 1)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Up) {
+                        list.currentIndex = Math.max(0, list.currentIndex - 1)
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                        popup.chooseCurrent()
+                        event.accepted = true
+                    } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F
+                               && list.currentIndex >= 0) {
+                        const entry = listModel.get(list.currentIndex)
+                        controller.toggleFavorite(entry.provider, entry.model)
+                        event.accepted = true
+                    }
+                }
+            }
+
+            ListModel { id: listModel }
+
+            ListView {
+                id: list
+                anchors {
+                    top: searchInput.bottom
+                    topMargin: 10
+                    bottom: pickerFooter.top
+                    bottomMargin: 8
+                    left: parent.left
+                    right: parent.right
+                }
+                clip: true
+                model: listModel
+                currentIndex: 0
+                highlightMoveDuration: 0
+                boundsBehavior: Flickable.StopAtBounds
+
+                section.property: "group"
+                section.criteria: ViewSection.FullString
+                section.delegate: Text {
+                    width: list.width
+                    height: 24
+                    verticalAlignment: Text.AlignBottom
+                    text: section
+                    font.bold: true
+                    font.pixelSize: 12
+                    color: palette.highlight
+                }
+
+                delegate: Rectangle {
+                    width: list.width
+                    height: 26
+                    radius: 5
+                    color: ListView.isCurrentItem ? Qt.alpha(palette.highlight, 0.3) : "transparent"
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        anchors.right: hint.left
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        text: (model.current ? "\u25cf " : "") + model.model
+                        font.pixelSize: 13
+                        font.bold: model.current
+                        color: palette.windowText
+                    }
+                    Text {
+                        id: hint
+                        anchors.right: parent.right
+                        anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: (model.favorite ? "\u2605 " : "")
+                              + model.provider_label
+                              + (model.requires_key ? " \u00b7 key" : "")
+                        font.pixelSize: 11
+                        color: Qt.alpha(palette.windowText, 0.55)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            list.currentIndex = index
+                            popup.chooseCurrent()
+                        }
+                    }
+                }
+            }
+
+            Text {
+                id: pickerFooter
+                anchors.bottom: parent.bottom
+                text: "enter select \u00b7 ctrl+f favorite \u00b7 esc close"
+                font.pixelSize: 11
+                color: Qt.alpha(palette.windowText, 0.5)
             }
         }
     }

@@ -29,6 +29,7 @@ pub mod qobject {
         #[qproperty(bool, background_answer, cxx_name = "backgroundAnswer")]
         #[qproperty(bool, needs_key, cxx_name = "needsKey")]
         #[qproperty(bool, can_configure_shortcut, cxx_name = "canConfigureShortcut")]
+        #[qproperty(QString, models_json, cxx_name = "modelsJson")]
         #[qproperty(bool, start_visible, cxx_name = "startVisible")]
         #[qproperty(bool, exit_on_dismiss, cxx_name = "exitOnDismiss")]
         type PopupController = super::PopupControllerRust;
@@ -57,10 +58,20 @@ pub mod qobject {
         #[cxx_name = "configureShortcut"]
         fn configure_shortcut(self: Pin<&mut PopupController>);
 
-        /// Switch to the next provider in the list.
+        /// Fill `modelsJson` with the models that can be picked.
         #[qinvokable]
-        #[cxx_name = "cycleProvider"]
-        fn cycle_provider(self: Pin<&mut PopupController>);
+        #[cxx_name = "loadModels"]
+        fn load_models(self: Pin<&mut PopupController>);
+
+        /// Use this model for the next questions.
+        #[qinvokable]
+        #[cxx_name = "chooseModel"]
+        fn choose_model(self: Pin<&mut PopupController>, provider: &QString, model: &QString);
+
+        /// Mark or unmark a model as a favourite.
+        #[qinvokable]
+        #[cxx_name = "toggleFavorite"]
+        fn toggle_favorite(self: Pin<&mut PopupController>, provider: &QString, model: &QString);
 
         /// Store the API key pasted for the current provider in the system secret
         /// store. The caller clears its own copy afterwards.
@@ -88,6 +99,7 @@ use cxx_qt::{CxxQtType, Initialize, Threading};
 use cxx_qt_lib::QString;
 use popupai_core::markdown;
 use popupai_core::orchestrator::Event;
+use popupai_core::state::{ModelRef, UserState};
 use popupai_platform::Command;
 use popupai_platform::shortcut::ShortcutStatus;
 use popupai_security::Secret;
@@ -95,6 +107,7 @@ use zeroize::Zeroizing;
 
 use crate::context;
 use crate::key_input;
+use crate::picker;
 use crate::shortcut_notice;
 use crate::view_model::ViewModel;
 
@@ -114,6 +127,7 @@ pub struct PopupControllerRust {
     background_answer: bool,
     needs_key: bool,
     can_configure_shortcut: bool,
+    models_json: QString,
     start_visible: bool,
     exit_on_dismiss: bool,
     model: ViewModel,
@@ -313,28 +327,87 @@ impl qobject::PopupController {
         }
     }
 
-    fn cycle_provider(mut self: Pin<&mut Self>) {
+    /// Build the picker list off the Qt thread (a local server may take a moment).
+    fn load_models(self: Pin<&mut Self>) {
         let Some(app) = context::get() else {
             return;
         };
-        let Some(info) = app.orchestrator.cycle_provider() else {
+        let orchestrator = app.orchestrator.clone();
+        let state_path = app.state_path.clone();
+        let qt_thread = self.qt_thread();
+        app.runtime.spawn(async move {
+            let choices = orchestrator.available_models().await;
+            let state = UserState::load(&state_path);
+            let current = orchestrator
+                .current_provider()
+                .map(|info| ModelRef::new(info.id, info.model));
+            let json = picker::to_json(&picker::build(&choices, &state, current.as_ref()));
+            let _ = qt_thread.queue(move |mut controller| {
+                controller
+                    .as_mut()
+                    .set_models_json(QString::from(json.as_str()));
+            });
+        });
+    }
+
+    fn choose_model(mut self: Pin<&mut Self>, provider: &QString, model: &QString) {
+        let Some(app) = context::get() else {
             return;
         };
-        tracing::info!(provider = %info.id, "provider selected");
-        self.as_mut()
-            .set_provider_label(QString::from(info.label.as_str()));
-        self.as_mut().refresh_needs_key();
-        // Remember the choice, unless the settings file could not be read: it must not
-        // be overwritten with defaults.
-        if let Some(path) = app.config_path.clone() {
-            let mut config = app.orchestrator.config();
-            config.default_provider = Some(info.id);
-            app.runtime.spawn_blocking(move || {
-                if let Err(err) = config.save(&path) {
-                    tracing::warn!("could not remember the provider choice: {err}");
-                }
-            });
+        let (provider, model) = (provider.to_string(), model.to_string());
+        if !app.orchestrator.select_model(&provider, &model) {
+            return;
         }
+        tracing::info!(provider = %provider, "model selected");
+        if let Some(info) = app.orchestrator.current_provider() {
+            self.as_mut()
+                .set_provider_label(QString::from(info.label.as_str()));
+        }
+        // Remember it (it is also what the application starts on next time).
+        let path = app.state_path.clone();
+        app.runtime.spawn_blocking(move || {
+            let mut state = UserState::load(&path);
+            state.touch(&ModelRef::new(provider, model));
+            if let Err(err) = state.save(&path) {
+                tracing::warn!("could not remember the model choice: {err}");
+            }
+        });
+        self.as_mut().refresh_needs_key();
+    }
+
+    fn toggle_favorite(self: Pin<&mut Self>, provider: &QString, model: &QString) {
+        let Some(app) = context::get() else {
+            return;
+        };
+        let wanted = ModelRef::new(provider.to_string(), model.to_string());
+        let path = app.state_path.clone();
+        let qt_thread = self.qt_thread();
+        let orchestrator = app.orchestrator.clone();
+        app.runtime.spawn(async move {
+            let saved = {
+                let path = path.clone();
+                tokio::task::spawn_blocking(move || {
+                    let mut state = UserState::load(&path);
+                    state.toggle_favorite(&wanted);
+                    state.save(&path)
+                })
+                .await
+            };
+            if !matches!(saved, Ok(Ok(()))) {
+                tracing::warn!("could not save the favourite");
+            }
+            let choices = orchestrator.available_models().await;
+            let state = UserState::load(&path);
+            let current = orchestrator
+                .current_provider()
+                .map(|info| ModelRef::new(info.id, info.model));
+            let json = picker::to_json(&picker::build(&choices, &state, current.as_ref()));
+            let _ = qt_thread.queue(move |mut controller| {
+                controller
+                    .as_mut()
+                    .set_models_json(QString::from(json.as_str()));
+            });
+        });
     }
 
     fn save_key(mut self: Pin<&mut Self>, key: &QString) {

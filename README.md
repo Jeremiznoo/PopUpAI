@@ -30,8 +30,11 @@ Details and the honest verification state: [docs/PLATFORM_COMPATIBILITY.md](docs
 Start `popupai` once (autostart is a setting, see below). Press **Ctrl+Shift+Space**
 (the default), type, press **Enter**. **Esc**, a click elsewhere, or the shortcut again
 closes it; the next opening is a fresh session. **Ctrl+P** (or a click on the dim line
-under the field) switches provider, **Stop** or **Ctrl+.** cancels an answer, **Copy**
-copies it.
+under the field) opens the model picker: type to search, **Up/Down** and **Enter** to choose,
+**Ctrl+F** to mark a favourite; recent and favourite models come first. The choice is
+remembered in `state.toml` next to the configuration. **Stop** or **Ctrl+.** cancels an
+answer, **Copy** copies it. The popup starts narrow and widens towards a square as the
+answer gets longer.
 
 The global shortcut needs the launcher file installed (see *Install for your user* below):
 the desktop portal refuses an application it cannot identify. On KDE the key is then
@@ -59,7 +62,7 @@ popup is for quick questions:
 Override any of them with `model = "…"` on the provider in the configuration file.
 
 **First use.** With no key stored, PopUpAI starts on Ollama if you have it. To use a
-hosted provider, switch to it (Ctrl+P): the field turns into a masked key field, and
+hosted provider, pick one of its models (Ctrl+P): the field turns into a masked key field, and
 the key you paste goes straight to the system secret store (KDE Wallet, GNOME Keyring or
 KeePassXC) and is never written to a file. Local models are never downloaded for you:
 install one yourself, for example `ollama pull llama3.2:1b`.

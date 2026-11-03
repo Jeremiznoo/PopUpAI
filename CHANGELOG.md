@@ -31,6 +31,11 @@ All notable changes are documented here. The format follows
 - Notification-area icon (StatusNotifierItem), autostart entry driven by
   `launch_at_startup`, desktop file and a per-user install script. Binary renamed `popupai`.
 
+- Model picker (Ctrl+P) with search, recent and favourite models, remembered in `state.toml`;
+  models come from each provider's default and from what a local Ollama has installed.
+  The popup widens towards a square as the answer grows. Both are covered by unit tests of
+  their logic and a headless load of the interface; **not yet looked at on screen**.
+
 ### Fixed (since the first popup)
 
 - Google reports a wrong API key as HTTP 400, which was shown as a generic error; it is now an
