@@ -1,6 +1,6 @@
 # Builds the Fedora package (.rpm) and attaches it to a GitHub pre-release when a version tag is pushed
 # (git tag v0.1.0 && git push origin v0.1.0). It is built in a Fedora container, because a binary built on
-# one distribution does not run on another (different Qt and libc). The .deb is built by hand in a Debian
+# one distribution does not run on another (different Qt and libc); the Fedora release is pinned to the one the package targets. The .deb is built by hand in a Debian
 # container (see docs/RELEASING.md) and added to the release.
 name: release
 on:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   rpm:
     runs-on: ubuntu-latest
-    container: fedora:latest
+    container: fedora:44
     steps:
       - run: dnf install -y git rpm-build rust cargo gcc-c++ cmake qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils
       - uses: actions/checkout@v4

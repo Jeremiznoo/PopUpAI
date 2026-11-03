@@ -8,7 +8,7 @@ to the repository.
 
 | Target | Source | Built by |
 |---|---|---|
-| Fedora `.rpm` | [packaging/rpm/popupai.spec](../packaging/rpm/popupai.spec) | CI, `fedora:latest` container |
+| Fedora `.rpm` | [packaging/rpm/popupai.spec](../packaging/rpm/popupai.spec) | CI, `fedora:44` container |
 | Debian `.deb` | [packaging/debian/](../packaging/debian/) | by hand, in a Debian container |
 | Arch (AUR) | [packaging/aur/PKGBUILD](../packaging/aur/PKGBUILD) | by the AUR maintainer, with `makepkg` |
 

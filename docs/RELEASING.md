@@ -7,7 +7,7 @@
 
 ## What has been done
 
-- **Fedora `.rpm`:** built by the release workflow in a Fedora container when a `v*` tag is pushed, and attached
+- **Fedora `.rpm`:** built by the release workflow in a Fedora 44 container when a `v*` tag is pushed, and attached
   to a pre-release. The build works (the spec, the dependencies and the icon and launcher install). The package
   has not been installed or run on a Fedora system other than the development machine.
 - **Debian `.deb`:** built with `tools/build-deb.sh` in a Debian 13 container made from the Exegol image, then
