@@ -129,6 +129,7 @@ Window {
     readonly property var commands: [
         { name: "/help", detail: "Keyboard shortcuts and commands" },
         { name: "/shortcuts", detail: "Same as /help" },
+        { name: "/shortcut", detail: "Set the global shortcut key" },
         { name: "/models", detail: "Choose the model (Ctrl+P)" },
         { name: "/settings", detail: "Connections and MCP servers (Ctrl+P twice)" }
     ]
@@ -138,12 +139,15 @@ Window {
         return commands.filter(c => c.name.indexOf(typed) === 0)
     }
 
+
     function runCommand() {
         const typed = input.text.trim().toLowerCase()
         const found = commands.find(c => c.name === typed) || matchingCommands()[0]
         input.text = ""
         const name = found ? found.name : "/help"
-        if (name === "/models")
+        if (name === "/shortcut")
+            controller.configureShortcut()
+        else if (name === "/models")
             openPicker()
         else if (name === "/settings")
             openSettings()
@@ -427,22 +431,10 @@ Window {
         }
     }
 
-    component TextButton: Text {
-        id: button
-        signal clicked()
-
+    // A dim label naming a key. Nothing in this application reacts to the mouse.
+    component Hint: Text {
         font.pixelSize: 11
-        color: Qt.alpha(palette.windowText, area.containsMouse ? 0.9 : 0.55)
-        font.underline: area.containsMouse
-
-        MouseArea {
-            id: area
-            anchors.fill: parent
-            anchors.margins: -4
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: button.clicked()
-        }
+        color: Qt.alpha(palette.windowText, 0.55)
     }
 
     // Soft shadow under the card.
@@ -503,11 +495,10 @@ Window {
                 color: "#bf616a"
             }
 
-            TextButton {
+            Hint {
                 visible: controller.canConfigureShortcut
-                text: "Set the shortcut\u2026"
+                text: "Type /shortcut to set the shortcut key"
                 font.pixelSize: 12
-                onClicked: controller.configureShortcut()
             }
 
             Text {
@@ -673,11 +664,7 @@ Window {
                         font.pixelSize: 11
                         color: Qt.alpha(palette.windowText, 0.65)
                     }
-                    Row {
-                        spacing: 16
-                        TextButton { text: "Run  (Enter)"; onClicked: controller.answerPermission(true) }
-                        TextButton { text: "Don't run  (Esc)"; onClicked: controller.answerPermission(false) }
-                    }
+                    Hint { text: "Enter: run    Esc: don't run" }
                 }
             }
 
@@ -692,37 +679,6 @@ Window {
                 border.color: (input.activeFocus || keyInput.activeFocus || signInBox.activeFocus)
                     ? Qt.alpha(popup.brandViolet, 0.9) : Qt.alpha(palette.windowText, 0.16)
 
-                // Send button: appears once there is something to send.
-                Rectangle {
-                    id: sendButton
-                    visible: !controller.needsKey && input.text.trim().length > 0
-                    width: 26
-                    height: 26
-                    radius: 13
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: sendArea.containsMouse ? Qt.lighter(popup.brandViolet, 1.2) : popup.brandViolet }
-                        GradientStop { position: 1.0; color: sendArea.containsMouse ? Qt.lighter(popup.brandBlue, 1.2) : popup.brandBlue }
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "\u2191"
-                        font.pixelSize: 15
-                        font.bold: true
-                        color: "#FCFCFD"
-                    }
-                    MouseArea {
-                        id: sendArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: popup.submit()
-                    }
-                }
 
                 // For a provider used through an account (ChatGPT): Enter starts the
                 // sign-in, which is confirmed in the browser.
@@ -773,24 +729,25 @@ Window {
                             color: Qt.alpha(palette.text, 0.65)
                         }
 
-                        Row {
+                        Hint {
                             visible: controller.signInCode.length > 0
-                            spacing: 14
-                            TextButton { text: "Copy code"; onClicked: popup.copyText(controller.signInCode) }
-                            TextButton { text: "Copy link"; onClicked: popup.copyText(controller.signInUrl) }
-                            TextButton {
-                                text: "Open link"
-                                onClicked: {
-                                    if (controller.signInUrl.indexOf("https://") === 0)
-                                        Qt.openUrlExternally(controller.signInUrl)
-                                }
-                            }
+                            text: "C: copy the code    L: copy the link    O: open the link"
                         }
                     }
 
                     Keys.onPressed: event => {
                         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                             controller.signIn()
+                            event.accepted = true
+                        } else if (controller.signInCode.length > 0 && event.key === Qt.Key_C) {
+                            popup.copyText(controller.signInCode)
+                            event.accepted = true
+                        } else if (controller.signInCode.length > 0 && event.key === Qt.Key_L) {
+                            popup.copyText(controller.signInUrl)
+                            event.accepted = true
+                        } else if (controller.signInCode.length > 0 && event.key === Qt.Key_O) {
+                            if (controller.signInUrl.indexOf("https://") === 0)
+                                Qt.openUrlExternally(controller.signInUrl)
                             event.accepted = true
                         }
                     }
@@ -801,7 +758,7 @@ Window {
                     visible: !controller.needsKey
                     anchors.fill: parent
                     anchors.margins: 10
-                    anchors.rightMargin: 40
+                    anchors.rightMargin: 10
                     color: palette.text
                     font.pixelSize: 14
                     wrapMode: TextEdit.Wrap
@@ -871,16 +828,15 @@ Window {
 
                 BrandMark { id: footMark; side: 12; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
 
-                TextButton {
+                Hint {
                     anchors.left: footMark.right
                     anchors.leftMargin: 6
                     anchors.right: actions.left
                     anchors.rightMargin: 8
                     elide: Text.ElideRight
                     text: controller.needsKey && !controller.signsIn
-                        ? controller.providerLabel + " · key goes to the system wallet"
+                        ? controller.providerLabel + " \u00b7 key goes to the system wallet"
                         : controller.providerLabel
-                    onClicked: popup.openPicker()
                 }
 
                 Row {
@@ -888,21 +844,15 @@ Window {
                     anchors.right: parent.right
                     spacing: 12
 
-                    TextButton {
-                        text: "\u2699 Settings"
-                        onClicked: popup.openSettings()
-                    }
-
-                    TextButton {
+                    Hint {
                         visible: controller.status === "streaming"
-                        text: "Stop"
-                        onClicked: controller.stop()
+                        text: "Ctrl+. stop"
                     }
-                    TextButton {
-                        visible: controller.answer.length > 0
-                        text: "Copy"
-                        onClicked: popup.copyAnswer()
+                    Hint {
+                        visible: controller.answer.length > 0 && controller.status !== "streaming"
+                        text: "Ctrl+Shift+C copy"
                     }
+                    Hint { text: "Ctrl+P menu \u00b7 / commands" }
                 }
             }
         }
@@ -929,13 +879,23 @@ Window {
                 }
                 Text {
                     anchors.right: parent.right
-                    text: "esc"
+                    text: "\u2192 back"
                     font.pixelSize: 12
                     color: Qt.alpha(palette.windowText, 0.5)
                 }
             }
 
-            Item { id: helpKeys; anchors.fill: parent; focus: popup.helpOpen }
+            Item {
+                id: helpKeys
+                anchors.fill: parent
+                focus: popup.helpOpen
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Right) {
+                        popup.closeHelp()
+                        event.accepted = true
+                    }
+                }
+            }
 
             Flickable {
                 anchors {
@@ -972,11 +932,12 @@ Window {
                     Heading { text: "Chat" }
                     Line { keys: "Enter"; what: "Send" }
                     Line { keys: "Shift+Enter"; what: "New line" }
-                    Line { keys: "/"; what: "Commands: /help, /shortcuts, /models, /settings (Tab completes)" }
+                    Line { keys: "/"; what: "Commands: /help, /shortcuts, /models, /settings, /shortcut (Tab completes)" }
                     Line { keys: "Ctrl+."; what: "Stop the answer" }
                     Line { keys: "Ctrl+R"; what: "Bring back an answer that finished in the background" }
                     Line { keys: "Ctrl+Shift+C"; what: "Copy the answer" }
                     Line { keys: "Esc"; what: "Close the popup (or the open page)" }
+                    Line { keys: "Right arrow"; what: "Back, from models, settings and this page" }
                     Heading { text: "Views" }
                     Line { keys: "Ctrl+P"; what: "Next view: chat, models, settings, then back to the chat" }
                     Line { keys: "Ctrl+,"; what: "Settings" }
@@ -1015,7 +976,7 @@ Window {
                 }
                 Text {
                     anchors.right: parent.right
-                    text: "esc"
+                    text: "\u2192 back"
                     font.pixelSize: 12
                     color: Qt.alpha(palette.windowText, 0.5)
                 }
@@ -1027,7 +988,10 @@ Window {
                 anchors.fill: parent
                 focus: popup.settingsOpen
                 Keys.onPressed: event => {
-                    if (event.key === Qt.Key_Down) {
+                    if (event.key === Qt.Key_Right) {
+                        popup.closeSettings()
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Down) {
                         settingsList.currentIndex = Math.min(settingsList.count - 1, settingsList.currentIndex + 1)
                         event.accepted = true
                     } else if (event.key === Qt.Key_Up) {
@@ -1100,20 +1064,13 @@ Window {
                             color: Qt.alpha(palette.windowText, 0.55)
                         }
                     }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            settingsList.currentIndex = index
-                            popup.activateSetting()
-                        }
-                    }
                 }
             }
 
             Text {
                 id: settingsFooter
                 anchors.bottom: parent.bottom
-                text: "enter choose \u00b7 del disconnect \u00b7 esc close"
+                text: "enter choose \u00b7 del disconnect \u00b7 \u2192 back"
                 font.pixelSize: 11
                 color: Qt.alpha(palette.windowText, 0.5)
             }
@@ -1141,7 +1098,7 @@ Window {
                 }
                 Text {
                     anchors.right: parent.right
-                    text: "esc"
+                    text: "\u2192 back"
                     font.pixelSize: 12
                     color: Qt.alpha(palette.windowText, 0.5)
                 }
@@ -1166,7 +1123,11 @@ Window {
                 }
 
                 Keys.onPressed: event => {
-                    if (event.key === Qt.Key_Down) {
+                    // Right at the end of the text goes back (inside the text it moves the cursor).
+                    if (event.key === Qt.Key_Right && searchInput.cursorPosition === searchInput.text.length) {
+                        popup.closePicker()
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Down) {
                         list.currentIndex = Math.min(list.count - 1, list.currentIndex + 1)
                         event.accepted = true
                     } else if (event.key === Qt.Key_Up) {
@@ -1246,20 +1207,13 @@ Window {
                         font.pixelSize: 11
                         color: Qt.alpha(palette.windowText, 0.55)
                     }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            list.currentIndex = index
-                            popup.chooseCurrent()
-                        }
-                    }
                 }
             }
 
             Text {
                 id: pickerFooter
                 anchors.bottom: parent.bottom
-                text: "enter select \u00b7 ctrl+f favorite \u00b7 ctrl+a connect \u00b7 esc close"
+                text: "enter select \u00b7 ctrl+f favorite \u00b7 ctrl+a connect \u00b7 \u2192 back"
                 font.pixelSize: 11
                 color: Qt.alpha(palette.windowText, 0.5)
             }
