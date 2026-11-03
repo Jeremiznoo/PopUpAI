@@ -187,6 +187,33 @@ async fn ollama_streams_ndjson_without_authentication() {
 }
 
 #[tokio::test]
+async fn gemini_reports_a_wrong_key_sent_as_http_400_as_an_authentication_error() {
+    let body = r#"{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID","domain":"googleapis.com"}]}}"#;
+    let mock = Mock::start(move |_| Reply::status(400, body)).await;
+    let provider = GeminiProvider::new(keyed(&mock, "/v1beta")).unwrap();
+    let error = err(provider.stream_chat(request("gemini-3.5-flash-lite")).await);
+    assert!(
+        matches!(error, ProviderError::Auth { status: 400, .. }),
+        "{error:?}"
+    );
+
+    // Any other 400 stays a plain API error.
+    let other = Mock::start(|_| {
+        Reply::status(
+            400,
+            r#"{"error":{"code":400,"message":"Invalid JSON payload"}}"#,
+        )
+    })
+    .await;
+    let provider = GeminiProvider::new(keyed(&other, "/v1beta")).unwrap();
+    let error = err(provider.stream_chat(request("gemini-3.5-flash-lite")).await);
+    assert!(
+        matches!(error, ProviderError::Api { status: 400, .. }),
+        "{error:?}"
+    );
+}
+
+#[tokio::test]
 async fn ollama_without_a_model_uses_the_smallest_installed_one() {
     let mock = Mock::start(|req| match req.target.as_str() {
         "/api/tags" => Reply::json(

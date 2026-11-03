@@ -43,8 +43,9 @@ The full threat table is in
 - The shortcut, tray and wallet code is tested against mocks written from the
   specifications, not against KDE. See
   [docs/PLATFORM_COMPATIBILITY.md](docs/PLATFORM_COMPATIBILITY.md).
-- The hosted providers have not been called live yet, so their wire formats are checked
-  against documentation and fixtures only.
+- The hosted providers were called live only with an invalid key (endpoints, headers and
+  authentication errors confirmed). Their streamed answers to a valid key are checked against
+  documentation and fixtures only.
 - Any process of the same user can read the user's session bus and, once the wallet is
   unlocked, ask the Secret Service for items. That is the trust model of the Linux desktop
   secret stores, not something PopUpAI can change.

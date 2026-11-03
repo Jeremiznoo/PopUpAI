@@ -67,6 +67,28 @@ pub(crate) fn error_message(body: &str) -> String {
     redact(&text).chars().take(MAX_MESSAGE_CHARS).collect()
 }
 
+/// Google answers a wrong API key with HTTP 400 (not 401 or 403), saying so in the
+/// error's `details` (`reason: API_KEY_INVALID`) and in its message. That is an
+/// authentication problem, and the user needs to hear "check your key", not "bad request".
+pub(crate) fn rejects_the_key(body: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let by_reason = value
+        .pointer("/error/details")
+        .and_then(Value::as_array)
+        .is_some_and(|details| {
+            details
+                .iter()
+                .any(|d| d.get("reason").and_then(Value::as_str) == Some("API_KEY_INVALID"))
+        });
+    by_reason
+        || value
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .is_some_and(|m| m.to_ascii_lowercase().contains("api key not valid"))
+}
+
 /// An `error` member inside a streamed JSON event, if there is one.
 pub(crate) fn stream_error(event: &Value) -> Option<ProviderError> {
     event
@@ -82,6 +104,23 @@ pub(crate) fn truncated() -> ProviderError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_google_invalid_key_answer_is_recognised_by_reason_or_by_message() {
+        let with_details = r#"{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID"}]}}"#;
+        assert!(rejects_the_key(with_details));
+        let message_only =
+            r#"{"error":{"code":400,"message":"API key not valid. Please pass a valid API key."}}"#;
+        assert!(rejects_the_key(message_only));
+        for other in [
+            r#"{"error":{"code":400,"message":"Unknown name \"foo\": Cannot find field."}}"#,
+            r#"{"error":{"details":[{"reason":"RATE_LIMIT_EXCEEDED"}]}}"#,
+            "not json",
+            "",
+        ] {
+            assert!(!rejects_the_key(other), "{other}");
+        }
+    }
 
     #[test]
     fn finds_errors_inside_stream_events() {

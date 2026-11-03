@@ -17,7 +17,7 @@ use reqwest::header::{HeaderValue, RETRY_AFTER};
 use reqwest::{Client, RequestBuilder, Response, redirect};
 use serde_json::Value;
 
-use crate::error::{error_message, from_reqwest};
+use crate::error::{error_message, from_reqwest, rejects_the_key};
 use crate::{ChatStream, ProviderError};
 
 pub(crate) type Out = VecDeque<Result<String, ProviderError>>;
@@ -76,10 +76,15 @@ pub(crate) async fn send(request: RequestBuilder) -> Result<Response, ProviderEr
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse::<u64>().ok())
         .map(Duration::from_secs);
-    let message = error_message(&read_error_body(response).await);
+    let raw = read_error_body(response).await;
+    let message = error_message(&raw);
     Err(match status.as_u16() {
         code @ (401 | 403) => ProviderError::Auth {
             status: code,
+            message,
+        },
+        400 if rejects_the_key(&raw) => ProviderError::Auth {
+            status: 400,
             message,
         },
         429 => ProviderError::RateLimited { retry_after },

@@ -49,11 +49,13 @@ impl RequestError {
         let name = provider.map_or("the provider", ProviderEntry::display_name);
         let text = match self {
             Self::NoProvider => {
-                "No AI provider is configured. Open Settings to add one.".to_owned()
+                "No AI provider is configured. Add one to the configuration file.".to_owned()
             }
-            Self::NoModel => format!("No model is selected for {name}. Choose one in Settings."),
+            Self::NoModel => format!(
+                "No model is selected for {name}. Set `model` for it in the configuration file."
+            ),
             Self::Credentials(CredentialError::OriginChanged { .. }) => format!(
-                "The endpoint for {name} changed after its API key was saved, so the key was not sent. Open Settings and enter the key again to confirm the new endpoint."
+                "The endpoint for {name} changed after its API key was saved, so the key was not sent. Paste the key again below to confirm the new endpoint."
             ),
             Self::Credentials(CredentialError::Store(StoreError::Unavailable(reason))) => format!(
                 "The API key for {name} cannot be read because no secure secret store is available ({reason})."
@@ -69,9 +71,11 @@ impl RequestError {
 
 fn provider_message(err: &ProviderError, provider: Option<&ProviderEntry>, name: &str) -> String {
     match err {
-        ProviderError::Auth { .. } => format!("{name} rejected the API key. Check it in Settings."),
+        ProviderError::Auth { .. } => {
+            format!("{name} rejected the API key. Paste a new one below.")
+        }
         ProviderError::MissingApiKey => {
-            format!("No API key is set for {name}. Add one in Settings.")
+            format!("No API key is set for {name}. Paste one below.")
         }
         ProviderError::RateLimited {
             retry_after: Some(wait),
@@ -168,10 +172,10 @@ mod tests {
             &p,
         );
         assert!(
-            auth.contains("My provider") && auth.contains("Settings"),
+            auth.contains("My provider") && auth.contains("Paste a new one"),
             "{auth}"
         );
-        assert!(say(ProviderError::MissingApiKey, &p).contains("Add one in Settings"));
+        assert!(say(ProviderError::MissingApiKey, &p).contains("Paste one below"));
         assert!(say(ProviderError::Timeout, &p).contains("did not answer in time"));
         let limited = say(
             ProviderError::RateLimited {
@@ -195,7 +199,7 @@ mod tests {
         assert!(
             RequestError::NoProvider
                 .user_message(None)
-                .contains("Settings")
+                .contains("configuration file")
         );
         assert!(
             RequestError::NoModel
@@ -214,7 +218,7 @@ mod tests {
             &p,
         );
         assert!(
-            moved.contains("was not sent") && moved.contains("enter the key again"),
+            moved.contains("was not sent") && moved.contains("Paste the key again"),
             "{moved}"
         );
         let locked = say(

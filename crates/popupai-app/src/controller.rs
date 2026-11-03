@@ -262,7 +262,11 @@ impl qobject::PopupController {
     fn on_event(mut self: Pin<&mut Self>, event: &Event) {
         let changed = self.as_mut().rust_mut().get_mut().model.apply(event);
         if changed {
-            self.sync();
+            self.as_mut().sync();
+        }
+        // A failure may mean the key was refused: ask again whether a new one is needed.
+        if matches!(event, Event::Failed { .. }) {
+            self.refresh_needs_key();
         }
     }
 

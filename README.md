@@ -64,9 +64,18 @@ the key you paste goes straight to the system secret store (KDE Wallet, GNOME Ke
 KeePassXC) and is never written to a file. Local models are never downloaded for you:
 install one yourself, for example `ollama pull llama3.2:1b`.
 
-**Not verified:** the adapters are tested against a scripted local server, and the model
-names above come from vendor documentation. **No request has been sent to a live service
-yet.** The first real use is also the first real test: please report what you see.
+**What is verified, and what is not.** Against a scripted local server: all four adapters,
+streaming, cancellation and error mapping. Against the **real** services on 2026-11-02:
+Ollama answers end to end (local `llama3.2:1b`); and Anthropic, OpenAI and Google each
+received one request with a deliberately **invalid** key and answered with an
+authentication error, which proved the endpoints and headers and found (and fixed) that
+Google reports a wrong key as HTTP 400. **Not verified:** a request with a *valid* key, the
+exact streamed format of the hosted services' answers, and the wallet round trip, because
+they need your own key and your wallet. The model names above come from vendor
+documentation. The first real use with your key is also the first real test: please report
+what you see.
+
+If a stored key is refused, the popup shows the key field again so you can paste a new one.
 
 ## Security and privacy model
 

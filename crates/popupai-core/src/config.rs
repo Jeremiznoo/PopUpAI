@@ -325,7 +325,7 @@ pub enum ConfigError {
     #[error("the configuration could not be read: {0}")]
     Parse(String),
     #[error(
-        "`{field}` looks like a secret. API keys must not be stored in the configuration file; add them in Settings so they go to the system secret store"
+        "`{field}` looks like a secret. API keys must not be stored in the configuration file; paste them in the popup's key field so they go to the system secret store"
     )]
     SecretInFile { field: String },
     #[error("invalid configuration: {}", join(.0))]

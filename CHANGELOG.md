@@ -31,6 +31,14 @@ All notable changes are documented here. The format follows
 - Notification-area icon (StatusNotifierItem), autostart entry driven by
   `launch_at_startup`, desktop file and a per-user install script. Binary renamed `popupai`.
 
+### Fixed (since the first popup)
+
+- Google reports a wrong API key as HTTP 400, which was shown as a generic error; it is now an
+  authentication error. Found by a live request with an invalid key to each hosted service.
+- A refused API key could not be replaced from the popup (the message pointed at a settings
+  window that does not exist). The key field now comes back after a refusal, and the messages
+  describe what the user can actually do.
+
 ### Changed (since the first popup)
 
 - The popup is minimal: one field at the bottom, the answer growing above it, one dim

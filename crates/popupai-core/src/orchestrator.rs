@@ -9,7 +9,7 @@
 //! Tokio runtime. Logging records only metadata (provider, model, counts, error
 //! kind), never prompts, answers or keys.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -122,6 +122,9 @@ struct State {
     tasks: HashMap<SessionId, AbortHandle>,
     /// Built providers, kept so HTTP connections are reused between questions.
     providers: HashMap<String, Arc<dyn Provider>>,
+    /// Providers whose stored key was refused (by the service, or because the endpoint
+    /// changed since it was saved). The popup asks for a new key until one is saved.
+    rejected_keys: HashSet<String>,
 }
 
 struct Inner {
@@ -177,6 +180,13 @@ impl Inner {
                 {
                     state.providers.remove(&entry.id);
                 }
+                if matches!(
+                    err,
+                    RequestError::Credentials(CredentialError::OriginChanged { .. })
+                        | RequestError::Provider(ProviderError::Auth { .. })
+                ) {
+                    state.rejected_keys.insert(entry.id.clone());
+                }
                 if state.sessions.fail(id) {
                     self.emit(Event::Failed {
                         session: id,
@@ -231,6 +241,7 @@ impl Orchestrator {
             selected: None,
             tasks: HashMap::new(),
             providers: HashMap::new(),
+            rejected_keys: HashSet::new(),
         };
         let inner = Inner {
             state: Mutex::new(state),
@@ -340,12 +351,16 @@ impl Orchestrator {
         }
     }
 
-    /// The current provider needs an API key and none is stored (or the store cannot
-    /// be read, in which case the user needs to hear about it too).
+    /// The current provider needs an API key from the user: none is stored (or the
+    /// store cannot be read, in which case the user needs to hear about it too), or the
+    /// stored one was refused and has to be replaced.
     pub async fn current_needs_key(&self) -> bool {
         let Some(info) = self.current_provider() else {
             return false;
         };
+        if self.inner.state().rejected_keys.contains(&info.id) {
+            return true;
+        }
         info.requires_key && !self.has_api_key(&info.id).await.unwrap_or(false)
     }
 
@@ -470,6 +485,7 @@ impl Orchestrator {
         };
         let (store, id) = (self.inner.store.clone(), provider_id.to_owned());
         blocking(move || credentials::save_key(&*store, &id, &origin, &key)).await?;
+        self.inner.state().rejected_keys.remove(provider_id);
         self.invalidate_credentials(provider_id);
         Ok(())
     }
@@ -1351,5 +1367,43 @@ mod tests {
         let requests = h.requests();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].model, "claude-haiku-5-5");
+    }
+
+    #[tokio::test]
+    async fn a_refused_key_asks_for_a_new_one_until_one_is_saved() {
+        let mut config = built_in_config();
+        config.default_provider = Some("anthropic".into());
+        let mut h = harness(config);
+        h.orch
+            .save_api_key("anthropic", Secret::new("wrong-key"))
+            .await
+            .unwrap();
+        assert!(
+            !h.orch.current_needs_key().await,
+            "a stored key is not missing"
+        );
+
+        let feed = h.feed();
+        h.orch.open();
+        h.orch.submit("question").unwrap();
+        feed.send(Err(ProviderError::Auth {
+            status: 401,
+            message: "invalid x-api-key".into(),
+        }))
+        .unwrap();
+        let Event::Failed { message, .. } = next(&mut h.events).await else {
+            panic!("expected a failure");
+        };
+        assert!(message.contains("Paste a new one"), "{message}");
+        assert!(
+            h.orch.current_needs_key().await,
+            "after a refusal the popup must ask for a new key"
+        );
+
+        h.orch
+            .save_api_key("anthropic", Secret::new("right-key"))
+            .await
+            .unwrap();
+        assert!(!h.orch.current_needs_key().await);
     }
 }

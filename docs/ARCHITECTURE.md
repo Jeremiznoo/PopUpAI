@@ -16,7 +16,7 @@ recorded in [docs/ADR/](ADR/): [0001 stack](ADR/0001-technology-stack.md),
 | `popupai-core`: Markdown renderer (whitelisted tags, no attribute, no image, no link) | Implemented | 12 unit tests, including hostile inputs and half-finished streams |
 | `popupai-core`: lightest default model per provider, Ollama smallest-installed model | Implemented | Unit tests and end-to-end tests against the scripted server. The vendor model names come from their documentation and are **not verified by a live call** |
 | `popupai-ai`: OpenAI, OpenAI-compatible, Anthropic, Gemini, Ollama adapters, streaming, cancellation, error taxonomy | Implemented | 39 unit tests and 17 end-to-end tests against a scripted local server |
-| `popupai-ai` against the live services | **Not verified** | Wire formats come from public documentation and offline fixtures; no real request has been made |
+| `popupai-ai` against the live services | **Partly verified** | Real services, 2026-11-02: a local Ollama answers end to end; Anthropic, OpenAI and Google each rejected an invalid key with an authentication error (endpoints and headers confirmed; Google's HTTP 400 for a wrong key found and fixed). **Not verified:** a request with a valid key and the hosted services' streamed answers, which need the user's own key |
 | `popupai-core`: configuration (validation, atomic `0600` storage, no keys in the file) | Implemented | 13 unit tests |
 | `popupai-core`: API keys bound to their endpoint, user-facing error messages | Implemented | 8 and 5 unit tests |
 | `popupai-core`: request orchestrator (single in-flight request, cancellation, connection reuse, metadata-only logs) | Implemented | 13 unit tests with a scripted provider, plus a log-privacy test in its own binary |
